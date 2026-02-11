@@ -54,6 +54,34 @@ impl FieldElement {
         }
         res
     }
+
+    // モジュラ平方根を計算する関数
+    // p % 4 == 3 の場合のみ対応 (Tonelli-Shanks法は未実装)
+    pub fn sqrt(&self) -> Option<Self> {
+        // 1. 定数の準備
+        let three = BigInt::from(3);
+        let four = BigInt::from(4);
+        let one = BigInt::from(1);
+
+        // 2. 素数の型チェック（p % 4 == 3 か？）
+        if &self.p % &four != three {
+            panic!("この素数は p % 4 == 3 の形式ではありません。Tonelli-Shanks法が必要です。");
+        }
+
+        // 3. 指数の計算: exponent = (p + 1) / 4
+        let exponent = (&self.p + &one) / &four;
+
+        // 4. 候補の計算: root = self^exponent
+        let root = self.pow(exponent);
+
+        // 5. 検算: root * root = self に戻ることを確認する
+        // 戻らない場合は平方剰余でない（ルートが存在しない）ことを表す
+        if &root * &root == *self {
+            Some(root)
+        } else {
+            None
+        }
+    }
 }
 
 impl<'a, 'b> Add<&'b FieldElement> for &'a FieldElement {
