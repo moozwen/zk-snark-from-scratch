@@ -4,6 +4,7 @@ use num_bigint::BigInt;
 use num_bigint::Sign;
 
 use crate::field::FieldElement;
+use crate::polynomial::Polynomial;
 
 /// FieldElement -> ark_bn254::Fr に変換する
 pub fn field_element_to_fr(fe: &FieldElement) -> Fr {
@@ -56,6 +57,19 @@ pub fn fr_to_field_element(fr: &Fr, p: &BigInt) -> FieldElement {
     FieldElement::new(value, p.clone())
 }
 
+/// 自作 Polynomial の係数を Vec<Fr> に変換する
+pub fn polynomial_to_fr_vec(poly: &Polynomial) -> Vec<Fr> {
+    poly.coefficients
+        .iter()
+        .map(|coeff| field_element_to_fr(coeff))
+        .collect()
+}
+
+/// QAP の多項式群（Vec<Polynomial>）をまとめて変換する
+pub fn polys_to_fr_vecs(polys: &Vec<Polynomial>) -> Vec<Vec<Fr>> {
+    polys.iter().map(|p| polynomial_to_fr_vec(p)).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -81,7 +95,7 @@ mod tests {
         let fe_back = fr_to_field_element(&fr, &p);
         assert_eq!(fe_back.value, BigInt::from(42));
     }
-    
+
     #[test]
     fn test_zero() {
         let p = BigInt::parse_bytes(
@@ -89,12 +103,12 @@ mod tests {
             10,
         )
         .unwrap();
-        
+
         let fe = FieldElement::new(BigInt::from(0), p.clone());
         let fr = field_element_to_fr(&fe);
         assert_eq!(fr, Fr::from(0u64));
     }
-    
+
     #[test]
     fn test_large_value() {
         let p = BigInt::parse_bytes(
@@ -102,12 +116,12 @@ mod tests {
             10,
         )
         .unwrap();
-        
+
         // p-1 は Fr で表現可能な最大値
         let val = &p - &BigInt::from(1);
         let fe = FieldElement::new(val, p.clone());
         let fr = field_element_to_fr(&fe);
-        
+
         // 逆変換して一致するか
         let fe_back = fr_to_field_element(&fr, &p);
         assert_eq!(fe.value, fe_back.value);
