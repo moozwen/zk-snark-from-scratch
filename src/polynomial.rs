@@ -323,7 +323,7 @@ impl<'a, 'b> Sub<&'b Polynomial> for &'a Polynomial {
         for i in 0..max_len {
             let zero = FieldElement::new(BigInt::from(0), p.clone());
             let a = self.coefficients.get(i).unwrap_or(&zero);
-            let b = self.coefficients.get(i).unwrap_or(&zero);
+            let b = other.coefficients.get(i).unwrap_or(&zero);
             res_coeffs.push(a - b);
         }
 

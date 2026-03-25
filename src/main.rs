@@ -2,6 +2,7 @@ mod field;
 mod polynomial;
 mod qap;
 mod r1cs;
+mod adapter;
 
 use field::FieldElement;
 use num_bigint::BigInt;
