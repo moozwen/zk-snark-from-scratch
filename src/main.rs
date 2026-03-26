@@ -4,6 +4,7 @@ mod qap;
 mod r1cs;
 mod adapter;
 mod setup;
+mod prover;
 
 use field::FieldElement;
 use num_bigint::BigInt;
