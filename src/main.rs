@@ -5,6 +5,7 @@ mod r1cs;
 mod adapter;
 mod setup;
 mod prover;
+mod verifier;
 
 use field::FieldElement;
 use num_bigint::BigInt;
