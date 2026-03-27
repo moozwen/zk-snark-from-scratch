@@ -82,3 +82,120 @@ pub fn prove_simple(
 
     Proof { a_g1, b_g2, c_g1 }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::adapter::{field_element_to_fr, polynomial_to_fr_vec, polys_to_fr_vecs};
+    use crate::field::FieldElement;
+    use crate::polynomial::Polynomial;
+    use crate::qap::Qap;
+    use crate::r1cs::{ConstraintSystem, CS_ONE};
+    use crate::setup::generate_srs;
+    use crate::verifier::verify_simple;
+    use num_bigint::{BigInt, BigUint};
+
+    /// x^3 + 5 の回路を作って、QAP -> SRS -> Prove -> Verify を通す
+    #[test]
+    fn test_simple_qap_end_to_end() {
+        // === BN254 の曲線位数を p として使う ===
+        let p = BigInt::parse_bytes(
+            b"21888242871839275222246405745257275088548364400416034343698204186575808495617",
+            10,
+        )
+        .unwrap();
+
+        // === 1. R1CS を構築する（x^3 + 5 の回路）===
+        let mut cs = ConstraintSystem::new();
+        let one = FieldElement::new(BigInt::from(1), p.clone());
+        cs.init_one(one);
+
+        // 入力 x = 3
+        let x = cs.alloc_variable();
+        cs.assign(x, FieldElement::new(BigInt::from(3), p.clone()));
+
+        // v1 = x * x
+        let v1 = cs.mul(x, x);
+
+        // v2 = v1 * x
+        let v2 = cs.mul(v1, x);
+
+        // y = v2 + 5
+        let five = FieldElement::new(BigInt::from(5), p.clone());
+        let y = cs.add_const(v2, five);
+
+        // === 2. QAP に変換 ===
+        let qap = Qap::from_r1cs(&cs);
+
+        // === 3. 多項式を Fr に変換 ===
+        let u_polys = polys_to_fr_vecs(&qap.a_polys);
+        let v_polys = polys_to_fr_vecs(&qap.b_polys);
+        let w_polys = polys_to_fr_vecs(&qap.c_polys);
+
+        // === 4. ウィットネスを Fr に変換 ===
+        let witness_fe = cs.generate_witness();
+        let witness: Vec<Fr> = witness_fe.iter().map(|w| field_element_to_fr(w)).collect();
+
+        // === 5. h(x) を計算する ===
+        // A(x) * B(x) - C(x) を Z(x) で割った商が h(x)
+        let num_constraints = cs.constraints.len();
+
+        // 合成多項式を自作の Polynomial として計算
+        let zero_fe = FieldElement::new(BigInt::from(0), p.clone());
+        let one_fe = FieldElement::new(BigInt::from(1), p.clone());
+
+        let mut a_poly = Polynomial::new(vec![zero_fe.clone()]);
+        let mut b_poly = Polynomial::new(vec![zero_fe.clone()]);
+        let mut c_poly = Polynomial::new(vec![zero_fe.clone()]);
+
+        for (i, w_val) in witness_fe.iter().enumerate() {
+            let scaled_a = qap.a_polys[i].scale(w_val.clone());
+            a_poly = &a_poly + &scaled_a;
+
+            let scaled_b = qap.b_polys[i].scale(w_val.clone());
+            b_poly = &b_poly + &scaled_b;
+
+            let scaled_c = qap.c_polys[i].scale(w_val.clone());
+            c_poly = &c_poly + &scaled_c;
+        }
+
+        // P(x) = A(x) * B(x) - C(x)
+        let ab = &a_poly * &b_poly;
+        let minus_one = &zero_fe - &one_fe;
+        let neg_c = c_poly.scale(minus_one);
+        let p_poly = &ab + &neg_c;
+
+        // Z(x) = (x-0)(x-1)(x-2)...
+        // 注意: 自作 QAP の補間点は 0, 1, 2, ... 始まり
+        let mut z_poly = Polynomial::new(vec![FieldElement::new(BigInt::from(1), p.clone())]);
+        for i in 0..num_constraints {
+            let i_fe = FieldElement::new(BigInt::from(i), p.clone());
+            let neg_i = &zero_fe - &i_fe;
+            let term = Polynomial::new(vec![neg_i, one_fe.clone()]);
+            z_poly = &z_poly * &term;
+        }
+
+        // h(x) = P(x) / Z(x)
+        let (h_poly, remainder) = p_poly.div(&z_poly);
+
+        // 余りがゼロであることを確認
+        let is_divisible = remainder
+            .coefficients
+            .iter()
+            .all(|c| c.value == BigInt::from(0));
+        assert!(is_divisible, "P(x) が Z(x) で割り切れません");
+
+        // h(x) の係数を Fr に変換
+        let h_coeffs = polynomial_to_fr_vec(&h_poly);
+
+        // === 6. SRS を生成 ===
+        let tau = Fr::from(777u64); // テスト用の固定値
+        let srs = generate_srs(tau, num_constraints);
+        
+        // === 7. 証明を生成 ===
+        let proof = prove_simple(&u_polys, &v_polys, &w_polys, &witness, &h_coeffs, &srs);
+
+        // === 8. 検証 ===
+        assert!(verify_simple(&proof), "検証に失敗しました");
+    }
+}
