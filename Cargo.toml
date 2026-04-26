@@ -1,7 +1,12 @@
 [package]
-name = "zero-knowledge-journey"
+name = "zk-snark-from-scratch"
 version = "0.1.0"
 edition = "2021"
+description = "Educational Rust implementation of Groth16 zk-SNARK"
+repository = "https://github.com/moozwen/zk-snark-from-scratch"
+license = "MIT"
+keywords = ["zkp", "groth16", "zk-snark", "cryptography", "rust"]
+categories = ["cryptography"]
 
 [dependencies]
 aes = "0.8.4"
