@@ -1,26 +1,3 @@
-// 使い方
-// =====
-// let p = BigInt::from(17);
-
-// // A(x) = 5x + 1
-// let poly_a = Polynomial::new(vec![
-//     FieldElement::new(BigInt::from(1), p.clone()),
-//     FieldElement::new(BigInt::from(5), p.clone())
-// ]);
-
-// // B(x) x - 1; 有限体17 では x + 16
-// let poly_b = Polynomial::new(vec![
-//     FieldElement::new(BigInt::from(16), p.clone()),
-//     FieldElement::new(BigInt::from(1), p.clone())
-// ]);
-
-// println!("A(x) = {}", poly_a);
-// println!("B(x) = {}", poly_b);
-
-// let poly_mul = &poly_a * &poly_b;
-// println!("A(x) * B(x) = {}", poly_mul);
-// =====
-
 use crate::field::FieldElement;
 use num_bigint::BigInt;
 use std::ops::{Add, Div, Mul, RemAssign, Sub};
@@ -57,70 +34,6 @@ impl Polynomial {
             result = &(&result * x) + coeff;
         }
         result
-    }
-
-    // 多項式の割り算（self / divisor）
-    // 戻り値: (商, 余り)
-    pub fn div(&self, divisor: &Polynomial) -> (Polynomial, Polynomial) {
-        let dividend = self.trim();
-        let divisor = divisor.trim();
-
-        if divisor.coefficients.is_empty() {
-            panic!("0除算はできません");
-        }
-
-        if dividend.coefficients.is_empty() {
-            return (Polynomial::new(vec![]), Polynomial::new(vec![]));
-        }
-
-        let p = divisor.coefficients[0].p.clone();
-        let zero_fe = FieldElement::new(BigInt::from(0), p.clone());
-
-        // 商 (quotient) と 余り (remainder)
-        let mut quotient = Polynomial::new(vec![zero_fe.clone(); dividend.coefficients.len()]); // 十分なサイズで初期化
-        let mut remainder = dividend.clone();
-
-        // 筆算のループ： 余りの次数が割る数の次数より大きい間続ける
-        while remainder.coefficients.len() >= divisor.coefficients.len() {
-            if remainder.coefficients.is_empty() {
-                break;
-            }
-
-            // 1. 最高次数の項同士を割って、係数を決める
-            // （例： 3x^3 / x^1 = 3x^2）
-            let rem_degree = remainder.degree();
-            let div_degree = divisor.degree();
-            let diff_degree = rem_degree - div_degree;
-
-            let lead_rem = remainder.coefficients.last().unwrap();
-            let lead_div = divisor.coefficients.last().unwrap();
-
-            // 係数 = rem の頭 / div の頭 = rem の頭 * (div の頭の逆数)
-            let factor = lead_rem * &lead_div.inverse();
-
-            // 2. 引くための多項式を作る（factor * x^diff_degree）
-            // 例： [0, 0, factor] みたいな多項式を作る
-            let mut term_coeffs = vec![zero_fe.clone(); diff_degree];
-            term_coeffs.push(factor.clone());
-            let term_poly = Polynomial::new(term_coeffs);
-
-            // 商に足す
-            quotient = &quotient + &term_poly.clone();
-
-            // 3. 余りから引く： remainder -= term * divisor
-            let sub_poly = &term_poly * &divisor.clone();
-
-            // 引き算
-            // 簡易的に -1倍 して足す
-            let minus_one = &FieldElement::new(BigInt::from(0), p.clone())
-                - &FieldElement::new(BigInt::from(1), p.clone());
-            let sub_poly_neg = sub_poly.scale(minus_one);
-            remainder = &remainder + &sub_poly_neg;
-
-            remainder = remainder.trim(); // 0になった最高次数の項を消す
-        }
-
-        (quotient.trim(), remainder.trim())
     }
 
     // 商と余りを返す（Quotient, Remainder）

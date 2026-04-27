@@ -176,7 +176,7 @@ mod tests {
         }
 
         // h(x) = P(x) / Z(x)
-        let (h_poly, remainder) = p_poly.div(&z_poly);
+        let (h_poly, remainder) = p_poly.div_rem(&z_poly);
 
         // 余りがゼロであることを確認
         let is_divisible = remainder
