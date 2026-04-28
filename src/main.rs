@@ -1,178 +1,125 @@
+mod adapter;
 mod field;
 mod polynomial;
+mod prover;
 mod qap;
 mod r1cs;
-mod adapter;
 mod setup;
-mod prover;
 mod verifier;
 
 use field::FieldElement;
 use num_bigint::BigInt;
 
+use ark_bn254::Fr;
+
 use crate::{
+    adapter::{field_element_to_fr, polynomial_to_fr_vec, polys_to_fr_vecs},
     polynomial::Polynomial,
+    prover::prove_simple,
     qap::Qap,
-    r1cs::{ConstraintSystem, LinearCombination},
+    r1cs::ConstraintSystem,
+    setup::generate_srs,
+    verifier::verify_simple,
 };
 
 fn main() {
-    let p = BigInt::from(17);
+    println!("=== zk-snark-from-scratch: x^3 + 5 proof demo ===\n");
+
+    // BN254 のスカラー体 位数
+    let p = BigInt::parse_bytes(
+        b"21888242871839275222246405745257275088548364400416034343698204186575808495617",
+        10,
+    )
+    .unwrap();
+
+    // Step 1: R1CS (y = x^3 + 5 with x = 3, y = 32)
+    println!("Step 1: Building R1CS for y = x^3 + 5 (x = 3)...");
     let mut cs = ConstraintSystem::new();
+    cs.init_one(FieldElement::new(BigInt::from(1), p.clone()));
 
-    // 0. 定数 CS_ONE の初期化
-    // これを忘れると Index 0 が None になり panic する
-    let one = FieldElement::new(BigInt::from(1), p.clone());
-    cs.init_one(one);
-
-    // 入力 x = 3
     let x = cs.alloc_variable();
     cs.assign(x, FieldElement::new(BigInt::from(3), p.clone()));
-
-    // v1 = x * x
     let v1 = cs.mul(x, x);
-
-    // v2 = v1 * x
     let v2 = cs.mul(v1, x);
+    let _y = cs.add_const(v2, FieldElement::new(BigInt::from(5), p.clone()));
 
-    // 値計算： y = v2 + 5
-    let five = FieldElement::new(BigInt::from(5), p.clone());
-    let y = cs.add_const(v2, five);
+    println!(
+        "  {} constraints, {} variables",
+        cs.constraints.len(),
+        cs.next_var_index
+    );
 
-    // 検証
-    println!("制約数: {}", cs.constraints.len()); // mul 2回 + add 1回 = 3つになるはず
-    let mut witness = cs.generate_witness();
-    println!("計算結果 y = {}", witness[y.0]);
-
-    if is_satisfied(&cs, &witness) {
-        println!("x^3 + 5 = y (抽象化版) 成功！");
-    }
-
-    // === 不正な Witness に変更 ===
-    // witness[4] = FieldElement::new(BigInt::from(999), p.clone());
-    // println!("改ざん後の y: {:?}", witness[4].value);
-    // === ここまで ===
-
-    // QAP 変換
+    // Step 2: R1CS -> QAP
+    println!("\nStep 2: Converting R1CS -> QAP...");
     let qap = Qap::from_r1cs(&cs);
 
-    println!("変数の数：{}", qap.a_polys.len());
-    println!("QAP A多項式の数: {}", qap.a_polys.len());
-    println!("A_poly[0] (ONE): {:?}", qap.a_polys[0]);
-    println!("A_poly[1] (x): {:?}", qap.a_polys[1]);
-    println!("A_poly[2] (v1): {:?}", qap.a_polys[2]);
-    println!("A_poly[3] (v2): {:?}", qap.a_polys[3]);
-    println!("A_poly[4] (y): {:?}", qap.a_polys[4]);
+    // Step 3: h(x) = (A(x)*B(x) - C(x)) / Z(x)
+    println!("\nStep 3: Computing h(x)...");
+    let witness_fe = cs.generate_witness();
+    let h_poly = compute_h_poly(&qap, &witness_fe, cs.constraints.len(), &p);
+    println!("  h(x) degree: {}", h_poly.degree());
 
-    // 1. 合成多項式 A(x)、B(x)、C(x) を作る
-    // 公式: A(x) = sum( witness[i] * A_poly_i(x) )
-    // つまり、Witness の値で重み付けして足し合わせる
-    let mut a_x = Polynomial::new(vec![]);
-    let mut b_x = Polynomial::new(vec![]);
-    let mut c_x = Polynomial::new(vec![]);
+    // Step 4: SRS (デモ用 tau = 777)
+    println!("\nStep 4: Generating SRS (tau = 777, demo only)...");
+    let tau = Fr::from(777u64);
+    let srs = generate_srs(tau, cs.constraints.len());
 
-    // Witness は [ONE, x, v1, v2, y] の順に並んでいる
-    for (i, w_val) in witness.iter().enumerate() {
-        // Aの合成
-        let poly_a = &qap.a_polys[i];
-        let scaled_a = poly_a.scale(w_val.clone());
-        a_x = &a_x + &scaled_a;
+    // Step 5: Prove
+    println!("\nStep 5: Generating proof...");
+    let u_polys = polys_to_fr_vecs(&qap.a_polys);
+    let v_polys = polys_to_fr_vecs(&qap.b_polys);
+    let w_polys = polys_to_fr_vecs(&qap.c_polys);
+    let witness: Vec<Fr> = witness_fe.iter().map(|w| field_element_to_fr(w)).collect();
+    let h_coeffs = polynomial_to_fr_vec(&h_poly);
+    let proof = prove_simple(&u_polys, &v_polys, &w_polys, &witness, &h_coeffs, &srs);
 
-        // Bの合成
-        let poly_b = &qap.b_polys[i];
-        let scaled_b = poly_b.scale(w_val.clone());
-        b_x = &b_x + &scaled_b;
-
-        // Cの合成
-        let poly_c = &qap.c_polys[i];
-        let scaled_c = poly_c.scale(w_val.clone());
-        c_x = &c_x + &scaled_c;
-    }
-
-    println!("A(x) 次数: {}", a_x.degree());
-
-    // 2. P(x) = A(x) * B(x) - C(x)
-    let prod_ab = &a_x * &b_x;
-
-    // 引き算: P = AB + (-1 * C)
-    let minus_one = &FieldElement::new(BigInt::from(0), p.clone())
-        - &FieldElement::new(BigInt::from(1), p.clone());
-    let neg_c = c_x.scale(minus_one);
-
-    let p_x = &prod_ab + &neg_c;
-    println!("P(x) 計算完了. 次数: {}", p_x.degree());
-
-    // 3. ターゲット多項式 Z(x) を作る
-    // Z(x) = (x - 0)(x - 1)...(x - (制約数 - 1))
-    // x=0, 1, 2 で必ず0になる多項式
-    let num_constraints = cs.constraints.len();
-    let mut z_x = Polynomial::new(vec![FieldElement::new(BigInt::from(1), p.clone())]); // 初期値1
-
-    let one_fe = FieldElement::new(BigInt::from(1), p.clone());
-    let zero_fe = FieldElement::new(BigInt::from(0), p.clone());
-
-    for i in 0..num_constraints {
-        // (x - i) を作る -> [-i, 1]
-        let i_fe = FieldElement::new(BigInt::from(i), p.clone());
-        let neg_i = &zero_fe - &i_fe;
-
-        let term = Polynomial::new(vec![neg_i, one_fe.clone()]);
-        z_x = &z_x * &term;
-    }
-
-    println!("Z(x) 計算完了. 次数: {}", z_x.degree());
-
-    // 4. 割り算: H(x) = P(x) / Z(x)
-    let (h_x, remainder) = p_x.div(&z_x);
-
-    println!("H(x) 次数: {}", h_x.degree());
-    println!("割り算の余り (次数): {}", remainder.degree());
-
-    // 余りがゼロ（係数が空 OR すべて0）なら証明成功
-    let is_valid_proof = remainder
-        .coefficients
-        .iter()
-        .all(|c| c.value == BigInt::from(0));
-
-    if is_valid_proof {
-        println!("🎉 大勝利！ H(x) が割り切れました。");
-        println!("これにて『計算が正しいこと』の数学的証明が完成です。");
+    // Step 6: Verify
+    println!("\nStep 6: Verifying proof...");
+    if verify_simple(&proof) {
+        println!("  OK! Proof verified");
     } else {
-        println!("💀 失敗... 余りが出てしまいました。Witnessか回路が間違っています。");
-        println!("余り: {:?}", remainder);
+        println!("  NG..Proof rejected");
     }
 }
 
-// 指定した Witness が、 ConstraintSystem のすべての制約を満たしているかチェックする
-fn is_satisfied(cs: &ConstraintSystem, witness: &Vec<FieldElement>) -> bool {
-    for constraint in &cs.constraints {
-        let a_val = evaluate_lc(&constraint.a, witness);
-        let b_val = evaluate_lc(&constraint.b, witness);
-        let c_val = evaluate_lc(&constraint.c, witness);
+/// h(x) = (A(x)*B(x) - C(x)) / Z(x) を計算する
+fn compute_h_poly(
+    qap: &Qap,
+    witness: &[FieldElement],
+    num_constraints: usize,
+    p: &BigInt,
+) -> Polynomial {
+    let zero = FieldElement::new(BigInt::from(0), p.clone());
+    let one = FieldElement::new(BigInt::from(1), p.clone());
 
-        // A * B == C かどうかを判定
-        if &(&a_val * &b_val) != &c_val {
-            return false;
-        }
+    // A(x), B(x), C(x) = sum_i witness[i] * poly_i(x)
+    let mut a = Polynomial::new(vec![zero.clone()]);
+    let mut b = Polynomial::new(vec![zero.clone()]);
+    let mut c = Polynomial::new(vec![zero.clone()]);
+    for (i, w) in witness.iter().enumerate() {
+        a = &a + &qap.a_polys[i].scale(w.clone());
+        b = &b + &qap.b_polys[i].scale(w.clone());
+        c = &c + &qap.c_polys[i].scale(w.clone());
     }
-    true
-}
 
-// LinearCombination（線形結合）に Witness を代入して値を計算する
-fn evaluate_lc(lc: &LinearCombination, witness: &Vec<FieldElement>) -> FieldElement {
-    let p = witness[0].p.clone();
+    // P(x) = A(x)*B(x) - C(x)
+    let p_poly = &(&a * &b) + &c.scale(&zero - &one);
 
-    // 1. 合計値を 0 で初期化
-    let mut total = FieldElement::new(BigInt::from(0), p.clone());
-
-    // 2. LC に含まれる「項（term）」を一つずつ取り出す
-    for (var, coeff) in &lc.terms {
-        // 3. var.0 (インデックス) を使って、witness ベクトルから実際の値を取り出す
-        let val = &witness[var.0];
-        // 4. (係数 × 実際の値) を計算する
-        let product = coeff * val;
-        // 5. これを合計に足していく
-        total = &total + &product;
+    // Z(x) = (x - 0)(x - 1)...(x - (n - 1))
+    let mut z_poly = Polynomial::new(vec![one.clone()]);
+    for i in 0..num_constraints {
+        let neg_i = &zero - &FieldElement::new(BigInt::from(i), p.clone());
+        z_poly = &z_poly * &Polynomial::new(vec![neg_i, one.clone()]);
     }
-    total
+
+    // h(x) = P(x) / Z(x)
+    let (h, remainder) = p_poly.div_rem(&z_poly);
+    assert!(
+        remainder
+            .coefficients
+            .iter()
+            .all(|c| c.value == BigInt::from(0)),
+        "P(x) is not divisible by Z(x)"
+    );
+    h
 }

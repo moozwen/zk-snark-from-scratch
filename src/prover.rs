@@ -191,7 +191,7 @@ mod tests {
         // === 6. SRS を生成 ===
         let tau = Fr::from(777u64); // テスト用の固定値
         let srs = generate_srs(tau, num_constraints);
-        
+
         // === 7. 証明を生成 ===
         let proof = prove_simple(&u_polys, &v_polys, &w_polys, &witness, &h_coeffs, &srs);
 
