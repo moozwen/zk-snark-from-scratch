@@ -14,7 +14,7 @@
 
 use crate::field::FieldElement;
 use num_bigint::BigInt;
-use std::ops::{Add, Div, Mul, RemAssign, Sub};
+use std::ops::{Add, Div, Mul, Sub};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Polynomial {

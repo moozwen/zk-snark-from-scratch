@@ -14,8 +14,6 @@
 //! v0.5 で Groth16 本式の Prover（ランダム化 r, s 含む）に置き換え予定。
 
 use ark_bn254::{Fr, G1Projective, G2Projective};
-use ark_ec::CurveGroup;
-use ark_ff::Field;
 
 use crate::setup::Srs;
 
@@ -105,10 +103,10 @@ mod tests {
     use crate::field::FieldElement;
     use crate::polynomial::Polynomial;
     use crate::qap::Qap;
-    use crate::r1cs::{ConstraintSystem, CS_ONE};
+    use crate::r1cs::ConstraintSystem;
     use crate::setup::generate_srs;
     use crate::verifier::verify_simple;
-    use num_bigint::{BigInt, BigUint};
+    use num_bigint::BigInt;
 
     /// x^3 + 5 の回路を作って、QAP -> SRS -> Prove -> Verify を通す
     #[test]

@@ -14,8 +14,7 @@
 //! v0.5 で Groth16 本式の SRS に置き換え予定。
 
 use ark_bn254::{Fr, G1Projective, G2Projective};
-use ark_ec::{CurveGroup, PrimeGroup};
-use ark_ff::Field;
+use ark_ec::PrimeGroup;
 
 /// 構造化文字列（Structured Reference String）
 pub struct Srs {

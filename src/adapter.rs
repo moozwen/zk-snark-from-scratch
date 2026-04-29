@@ -10,7 +10,7 @@
 //! - [`polynomial_to_fr_vec`] / [`polys_to_fr_vecs`]: 多項式の係数ベクトルをまとめて変換
 
 use ark_bn254::Fr;
-use ark_ff::{BigInteger, BigInteger256, PrimeField};
+use ark_ff::{BigInteger256, PrimeField};
 use num_bigint::BigInt;
 use num_bigint::Sign;
 
