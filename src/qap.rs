@@ -1,3 +1,15 @@
+//! R1CS から Quadratic Arithmetic Program (QAP) への変換を提供する。
+//!
+//! Groth16 実装の Layer 2（回路の表現）。R1CS の制約系をラグランジュ補間で
+//! 多項式表現に変換することで、ペアリングベースの効率的な検証を可能にする。
+//!
+//! ## 主要型
+//! - [`Qap`]: 各変数 i に対する `u_i(x), v_i(x), w_i(x)` の組
+//!   （`a_polys`, `b_polys`, `c_polys`）
+//!
+//! ## 補間点
+//! 制約 i 番目を `x = i` の点に対応させる（補間点列は 0, 1, ..., n-1）。
+
 use num_bigint::BigInt;
 
 use crate::field::FieldElement;

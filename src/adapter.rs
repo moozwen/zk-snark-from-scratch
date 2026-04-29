@@ -1,3 +1,14 @@
+//! 自作 [`FieldElement`](crate::field::FieldElement) と arkworks の `Fr` の相互変換を提供する。
+//!
+//! Groth16 実装の Layer 2 と Layer 3 の境界。Layer 1〜2 は教育目的で自作した
+//! 有限体・多項式ライブラリを使い、Layer 3 のペアリング演算は arkworks の
+//! BN254 実装に依存する。本モジュールはその橋渡しを担う。
+//!
+//! ## 主要関数
+//! - [`field_element_to_fr`]: 自作 → arkworks
+//! - [`fr_to_field_element`]: arkworks → 自作
+//! - [`polynomial_to_fr_vec`] / [`polys_to_fr_vecs`]: 多項式の係数ベクトルをまとめて変換
+
 use ark_bn254::Fr;
 use ark_ff::{BigInteger, BigInteger256, PrimeField};
 use num_bigint::BigInt;

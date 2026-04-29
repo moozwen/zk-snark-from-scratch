@@ -1,3 +1,18 @@
+//! Groth16 の Structured Reference String (SRS) を生成する trusted setup。
+//!
+//! Groth16 実装の Layer 3（プロトコル）。秘密のスカラー τ から
+//! `[1, τ, τ², ...]·G1`、同 G2、`τⁱ·t(τ)·G1` の点列を計算する。
+//!
+//! ## 主要型
+//! - [`Srs`]: G1 / G2 / ht の楕円曲線点ベクトル
+//!
+//! ## 主要関数
+//! - [`generate_srs`]: τ と制約数 n から SRS を生成
+//!
+//! ## 注意
+//! 現状は **simple QAP 版** の SRS（α, β, γ, δ なし）。
+//! v0.5 で Groth16 本式の SRS に置き換え予定。
+
 use ark_bn254::{Fr, G1Projective, G2Projective};
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::Field;
@@ -88,7 +103,7 @@ mod tests {
     }
 
     #[test]
-    fn test_srs_g1_second_is_tau_tims_g() {
+    fn test_srs_g1_second_is_tau_times_g() {
         let tau = Fr::from(42u64);
         let srs = generate_srs(tau, 3);
 

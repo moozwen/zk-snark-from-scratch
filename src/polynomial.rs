@@ -1,3 +1,17 @@
+//! 有限体係数の多項式と、その演算を提供する。
+//!
+//! Groth16 実装の Layer 1（数学的基盤）。R1CS から QAP への変換や、
+//! 証明生成における h(x) = (A·B - C)/Z(x) の計算で使われる。
+//!
+//! ## 主要型
+//! - [`Polynomial`]: [`FieldElement`](crate::field::FieldElement) を係数とする dense 表現。
+//!   `Add`, `Sub`, `Mul`, `Div` を実装。
+//!
+//! ## 主要メソッド
+//! - [`Polynomial::evaluate`]: ホーナー法で多項式を評価
+//! - [`Polynomial::div_rem`]: 多項式の長除法（商と余りを返す）
+//! - [`Polynomial::lagrange_interpolation`]: x = 0, 1, 2, ... の点列からラグランジュ補間
+
 use crate::field::FieldElement;
 use num_bigint::BigInt;
 use std::ops::{Add, Div, Mul, RemAssign, Sub};

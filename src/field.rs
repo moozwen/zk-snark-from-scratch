@@ -1,3 +1,14 @@
+//! 有限体 GF(p) 上の演算を提供する。
+//!
+//! Groth16 実装の Layer 1。多項式・楕円曲線・QAPなどの上位レイヤーがこの上に構築される。
+//!
+//! ## 主要型
+//! - [`FieldElement`]: 法 `p` の元。`Add`, `Sub`, `Mul`, `Div` を実装。
+//!
+//! ## 制約
+//! - [`FieldElement::sqrt`] は `p ≡ 3 (mod 4)` の素数でのみ動作。
+//!   それ以外は `panic!` する（Tonelli-Shanks 法は未実装）。
+
 use num_bigint::BigInt;
 use std::fmt;
 use std::ops::{Add, Div, Mul, Sub};

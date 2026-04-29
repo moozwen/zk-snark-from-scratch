@@ -1,3 +1,18 @@
+//! QAP + SRS から証明 `(A, B, C)` を生成する Prover。
+//!
+//! Groth16 実装の Layer 3（プロトコル）。Witness と QAP 多項式の係数を
+//! SRS 上で評価し、楕円曲線点として証明を構築する。
+//!
+//! ## 主要型
+//! - [`Proof`]: `(A ∈ G1, B ∈ G2, C ∈ G1)` の三点組
+//!
+//! ## 主要関数
+//! - [`prove_simple`]: simple QAP 版の証明生成
+//!
+//! ## 注意
+//! 現状は **simple 版** （α, β, γ, δ なし、zero-knowledge 化なし）。
+//! v0.5 で Groth16 本式の Prover（ランダム化 r, s 含む）に置き換え予定。
+
 use ark_bn254::{Fr, G1Projective, G2Projective};
 use ark_ec::CurveGroup;
 use ark_ff::Field;
@@ -122,7 +137,7 @@ mod tests {
 
         // y = v2 + 5
         let five = FieldElement::new(BigInt::from(5), p.clone());
-        let y = cs.add_const(v2, five);
+        let _y = cs.add_const(v2, five);
 
         // === 2. QAP に変換 ===
         let qap = Qap::from_r1cs(&cs);
