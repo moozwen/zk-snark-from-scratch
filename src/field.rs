@@ -138,3 +138,90 @@ impl fmt::Display for FieldElement {
         write!(f, "{} mod {}", self.value, self.p)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fe(value: i64, p: i64) -> FieldElement {
+        FieldElement::new(BigInt::from(value), BigInt::from(p))
+    }
+
+    #[test]
+    fn new_normalizes_negative_value() {
+        // -1 mod 7 == 6
+        assert_eq!(fe(-1, 7).value, BigInt::from(6));
+    }
+
+    #[test]
+    fn new_normalizes_value_larger_than_p() {
+        // 10 mod 7 == 3
+        assert_eq!(fe(10, 7).value, BigInt::from(3));
+    }
+
+    #[test]
+    fn add_sub_mul_basic() {
+        // F_7 上で
+        assert_eq!((&fe(3, 7) + &fe(5, 7)).value, BigInt::from(1));
+        assert_eq!((&fe(2, 7) - &fe(5, 7)).value, BigInt::from(4));
+        assert_eq!((&fe(3, 7) * &fe(5, 7)).value, BigInt::from(1));
+    }
+
+    #[test]
+    fn div_basic() {
+        // F_7: 6 / 3 == 2
+        assert_eq!((&fe(6, 7) / &fe(3, 7)).value, BigInt::from(2));
+    }
+
+    #[test]
+    #[should_panic(expected = "異なる標数")]
+    fn add_with_different_modulus_panics() {
+        let _ = &fe(1, 7) + &fe(1, 11);
+    }
+
+    #[test]
+    fn inverse_of_zero_returns_none() {
+        assert!(fe(0, 7).inverse().is_none());
+    }
+
+    #[test]
+    fn inverse_times_self_is_one() {
+        // F_7 で 3 の逆元は 5（3*5 = 15 = 1 mod 7）
+        let a = fe(3, 7);
+        let inv = a.inverse().unwrap();
+        assert_eq!((&a * &inv).value, BigInt::from(1));
+    }
+
+    #[test]
+    fn pow_basic_cases() {
+        let a = fe(3, 7);
+        assert_eq!(a.pow(BigInt::from(0)).value, BigInt::from(1)); // a^0 == 1
+        assert_eq!(a.pow(BigInt::from(1)).value, BigInt::from(3)); // a^1 == a
+        // フェルマーの小定理: a^(p-1) == 1
+        assert_eq!(a.pow(BigInt::from(6)).value, BigInt::from(1));
+    }
+
+    #[test]
+    fn sqrt_quadratic_residue() {
+        // F_7 で 4 の平方根は 2 または 5（5 = -2 mod 7）
+        let root = fe(4, 7).sqrt().unwrap();
+        assert!(root.value == BigInt::from(2) || root.value == BigInt::from(5));
+    }
+
+    #[test]
+    fn sqrt_non_residue_returns_none() {
+        // F_7 で 3 は平方剰余ではない
+        assert!(fe(3, 7).sqrt().is_none());
+    }
+
+    #[test]
+    fn sqrt_unsupported_prime_returns_none() {
+        // p = 5 は 5 % 4 == 1 なので未対応
+        assert!(fe(4, 5).sqrt().is_none());
+    }
+
+    #[test]
+    fn display_format() {
+        assert_eq!(format!("{}", fe(3, 7)), "3 mod 7");
+    }
+}
