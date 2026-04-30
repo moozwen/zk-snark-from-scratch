@@ -6,8 +6,8 @@
 //! - [`FieldElement`]: 法 `p` の元。`Add`, `Sub`, `Mul`, `Div` を実装。
 //!
 //! ## 制約
-//! - [`FieldElement::sqrt`] は `p ≡ 3 (mod 4)` の素数でのみ動作。
-//!   それ以外は `panic!` する（Tonelli-Shanks 法は未実装）。
+//! - [`FieldElement::sqrt`] は `p ≡ 3 (mod 4)` の素数でのみ計算する。
+//!   それ以外は `None` を返す（Tonelli-Shanks 法は未実装）。
 
 use num_bigint::BigInt;
 use std::fmt;
@@ -74,8 +74,9 @@ impl FieldElement {
         let one = BigInt::from(1);
 
         // 2. 素数の型チェック（p % 4 == 3 か？）
+        // Tonelli-Shanks 法は未実装のため、上記以外の素数では None を返す
         if &self.p % &four != three {
-            panic!("この素数は p % 4 == 3 の形式ではありません。Tonelli-Shanks法が必要です。");
+            return None;
         }
 
         // 3. 指数の計算: exponent = (p + 1) / 4
