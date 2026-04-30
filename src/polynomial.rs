@@ -163,7 +163,7 @@ impl Polynomial {
             }
 
             // 分母の逆数を計算して、分子にかける（割り算の代わり）
-            let denom_inv = denominator.inverse();
+            let denom_inv = denominator.inverse().expect("leading coefficient is zero");
             let basis_poly = numerator.scale(denom_inv);
 
             // 高さをあわせて合計に足す： total += y_i * basis_poly

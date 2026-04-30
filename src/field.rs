@@ -31,16 +31,15 @@ impl FieldElement {
         }
     }
 
-    // 逆元 a^-1 mod p を求める
-    pub fn inverse(&self) -> Self {
-        // 値が 0 の場合は逆元が存在しないのでパニック
-        let inv_value = self.value.modinv(&self.p).expect("0の逆元は存在しません");
-        FieldElement::new(inv_value, self.p.clone())
+    // 逆元 a^-1 mod p を求める。0 の場合は None を返す。
+    pub fn inverse(&self) -> Option<Self> {
+        let inv_value = self.value.modinv(&self.p)?;
+        Some(FieldElement::new(inv_value, self.p.clone()))
     }
 
     // 割り算 a / b は a * (b^-1) と同じ
     pub fn div(&self, other: &Self) -> Self {
-        self * &other.inverse()
+        self * &other.inverse().expect("division by zero")
     }
 
     // べき乗（繰り返し二乗法 Square and Multiply）
@@ -53,7 +52,7 @@ impl FieldElement {
         let two = BigInt::from(2);
 
         while exp > zero {
-            // 指数の最下位ビットが1（奇数）なら、現在の base を結果にかける
+            // 指数の最下位ビットが1（奇数）なら、現在の base を結果に掛ける
             if &exp % &two != zero {
                 res = &res * &base;
             }
@@ -128,7 +127,7 @@ impl<'a, 'b> Div<&'b FieldElement> for &'a FieldElement {
     fn div(self, other: &'b FieldElement) -> FieldElement {
         assert_eq!(self.p, other.p, "異なる標数の体では計算できません");
         // 有限体の割り算は a * (bの逆元)
-        self * &other.inverse()
+        self * &other.inverse().expect("division by zero")
     }
 }
 
