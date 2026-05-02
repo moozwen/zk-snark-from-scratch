@@ -45,10 +45,10 @@ impl FieldElement {
     }
 
     // べき乗（繰り返し二乗法 Square and Multiply）
-    pub fn pow(&self, exponent: BigInt) -> Self {
+    pub fn pow(&self, exponent: impl Into<BigInt>) -> Self {
         let mut res = FieldElement::new(BigInt::from(1), self.p.clone());
         let mut base = self.clone();
-        let mut exp = exponent;
+        let mut exp = exponent.into();
 
         let zero = BigInt::from(0);
         let two = BigInt::from(2);
