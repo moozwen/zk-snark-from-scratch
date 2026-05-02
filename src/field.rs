@@ -13,6 +13,18 @@ use num_bigint::BigInt;
 use std::fmt;
 use std::ops::{Add, Div, Mul, Sub};
 
+/// 有限体 GF(p) 上の元を表す。
+/// 
+/// 内部的に `value` は `0 <= value < p` の範囲に正規化される。
+/// `p` は素数を想定しているが、構造体側ではチェックしない（呼び出し側の責務）。
+/// 
+/// # 例
+/// 
+/// ```text
+/// let a = FieldElement::new(3, 7);
+/// let b = FieldElement::new(5, 7);
+/// let sum = &a + &b; // 8 mod 7 = 1
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldElement {
     pub value: BigInt, // 値
@@ -20,6 +32,18 @@ pub struct FieldElement {
 }
 
 impl FieldElement {
+    /// 法 `p` のもとで `value` を正規化した `FieldElement` を生成する。
+    ///
+    /// 負の値や `p` を超える値も自動で `0 <= v < p` に丸める。
+    /// `value` と `p` は `Into<BigInt>` を満たす任意の型を受け付ける
+    /// （`i32`, `i64`, `BigInt` など）。
+    ///
+    /// # 例
+    ///
+    /// ```text
+    /// let a = FieldElement::new(-1, 7);  // value == 6
+    /// let b = FieldElement::new(10, 7);  // value == 3
+    /// ```
     pub fn new(value: impl Into<BigInt>, p: impl Into<BigInt>) -> Self {
         let value = value.into();
         let p = p.into();
@@ -33,18 +57,24 @@ impl FieldElement {
         }
     }
 
-    // 逆元 a^-1 mod p を求める。0 の場合は None を返す。
+    /// 逆元 a^-1 mod p を求める。0 の場合は None を返す。
+    /// 
+    /// 内部的には `BigInt::modinv` を使い、拡張ユークリッド法で計算する。
+    /// `p` が素数なら、フェルマーの小定理 `a^[p-2] ≡ a^{-1} (mod p)` でも
+    /// 同じ結果が得られるが、拡張ユークリッド法の方が速い。
     pub fn inverse(&self) -> Option<Self> {
         let inv_value = self.value.modinv(&self.p)?;
         Some(FieldElement::new(inv_value, self.p.clone()))
     }
 
-    // 割り算 a / b は a * (b^-1) と同じ
+    /// 割り算 `a / b = a * b^{-1}`。`b == 0` のとき panic する。
     pub fn div(&self, other: &Self) -> Self {
         self * &other.inverse().expect("division by zero")
     }
 
-    // べき乗（繰り返し二乗法 Square and Multiply）
+    /// `self^exponent mod p` を計算する。
+    ///
+    /// 繰り返し二乗法（square-and-multiply）で `O(log exponent)` 時間。
     pub fn pow(&self, exponent: impl Into<BigInt>) -> Self {
         let mut res = FieldElement::new(BigInt::from(1), self.p.clone());
         let mut base = self.clone();
@@ -67,8 +97,17 @@ impl FieldElement {
         res
     }
 
-    // モジュラ平方根を計算する関数
-    // p % 4 == 3 の場合のみ対応 (Tonelli-Shanks法は未実装)
+    /// モジュラ平方根 `√self mod p` を返す。
+    ///
+    /// - 平方剰余でない場合: `None`
+    /// - `p % 4 != 3` の場合: `None`（Tonelli-Shanks 法は未実装）
+    /// - それ以外: `Some(root)` を返す。`root` と `p - root` の 2 つの根のうち
+    ///   どちらか一方が返る（どちらかは保証しない）。
+    ///
+    /// # アルゴリズム
+    ///
+    /// `p ≡ 3 (mod 4)` のとき、`a^((p+1)/4) mod p` が候補となる。
+    /// 検算 (`root^2 == self`) で平方剰余かどうかを判定する。
     pub fn sqrt(&self) -> Option<Self> {
         // 1. 定数の準備
         let three = BigInt::from(3);
@@ -97,6 +136,7 @@ impl FieldElement {
     }
 }
 
+/// `&a + &b`: 加法。法 `p` が異なる場合は panic する。
 impl<'a, 'b> Add<&'b FieldElement> for &'a FieldElement {
     type Output = FieldElement;
 
@@ -106,6 +146,7 @@ impl<'a, 'b> Add<&'b FieldElement> for &'a FieldElement {
     }
 }
 
+/// `&a - &b`: 減法。法 `p` が異なる場合は panic する。
 impl<'a, 'b> Sub<&'b FieldElement> for &'a FieldElement {
     type Output = FieldElement;
 
@@ -115,6 +156,7 @@ impl<'a, 'b> Sub<&'b FieldElement> for &'a FieldElement {
     }
 }
 
+/// `&a * &b`: 乗法。法 `p` が異なる場合は panic する。
 impl<'a, 'b> Mul<&'b FieldElement> for &'a FieldElement {
     type Output = FieldElement;
 
@@ -124,6 +166,8 @@ impl<'a, 'b> Mul<&'b FieldElement> for &'a FieldElement {
     }
 }
 
+/// `&a / &b`: 除法 = `&a * &b.inverse()`。
+/// 法 `p` が異なる場合 / `b == 0` の場合は panic する。
 impl<'a, 'b> Div<&'b FieldElement> for &'a FieldElement {
     type Output = FieldElement;
 
@@ -134,6 +178,7 @@ impl<'a, 'b> Div<&'b FieldElement> for &'a FieldElement {
     }
 }
 
+/// `"value mod p"` 形式で表示する。
 impl fmt::Display for FieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // "value mod p" という形式で表示するルールを定義
