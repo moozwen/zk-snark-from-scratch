@@ -35,13 +35,13 @@ fn main() {
     // Step 1: R1CS (y = x^3 + 5 with x = 3, y = 32)
     println!("Step 1: Building R1CS for y = x^3 + 5 (x = 3)...");
     let mut cs = ConstraintSystem::new();
-    cs.init_one(FieldElement::new(BigInt::from(1), p.clone()));
+    cs.init_one(FieldElement::new(1, p.clone()));
 
     let x = cs.alloc_variable();
-    cs.assign(x, FieldElement::new(BigInt::from(3), p.clone()));
+    cs.assign(x, FieldElement::new(3, p.clone()));
     let v1 = cs.mul(x, x);
     let v2 = cs.mul(v1, x);
-    let _y = cs.add_const(v2, FieldElement::new(BigInt::from(5), p.clone()));
+    let _y = cs.add_const(v2, FieldElement::new(5, p.clone()));
 
     println!(
         "  {} constraints, {} variables",
@@ -89,8 +89,8 @@ fn compute_h_poly(
     num_constraints: usize,
     p: &BigInt,
 ) -> Polynomial {
-    let zero = FieldElement::new(BigInt::from(0), p.clone());
-    let one = FieldElement::new(BigInt::from(1), p.clone());
+    let zero = FieldElement::new(0, p.clone());
+    let one = FieldElement::new(1, p.clone());
 
     // A(x), B(x), C(x) = sum_i witness[i] * poly_i(x)
     let mut a = Polynomial::new(vec![zero.clone()]);
@@ -108,7 +108,7 @@ fn compute_h_poly(
     // Z(x) = (x - 0)(x - 1)...(x - (n - 1))
     let mut z_poly = Polynomial::new(vec![one.clone()]);
     for i in 0..num_constraints {
-        let neg_i = &zero - &FieldElement::new(BigInt::from(i), p.clone());
+        let neg_i = &zero - &FieldElement::new(i, p.clone());
         z_poly = &z_poly * &Polynomial::new(vec![neg_i, one.clone()]);
     }
 

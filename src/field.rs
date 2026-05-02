@@ -20,10 +20,12 @@ pub struct FieldElement {
 }
 
 impl FieldElement {
-    pub fn new(value: BigInt, p: BigInt) -> Self {
+    pub fn new(value: impl Into<BigInt>, p: impl Into<BigInt>) -> Self {
+        let value = value.into();
+        let p = p.into();
         // 値が 0 <= value < p の範囲に収まるように正規化
         // Rust の % は余りを求める演算子であるため、負数を割ると結果がマイナスになる。
-        // そこで、「負の数」を「正の正解」に無理やり引き戻す。
+        // そこで、「負の数」を「正の整数」に無理やり引き戻す。
         let normalized_value = ((value % &p) + &p) % &p;
         FieldElement {
             value: normalized_value,
@@ -144,7 +146,7 @@ mod tests {
     use super::*;
 
     fn fe(value: i64, p: i64) -> FieldElement {
-        FieldElement::new(BigInt::from(value), BigInt::from(p))
+        FieldElement::new(value, p)
     }
 
     #[test]
@@ -197,7 +199,7 @@ mod tests {
         let a = fe(3, 7);
         assert_eq!(a.pow(BigInt::from(0)).value, BigInt::from(1)); // a^0 == 1
         assert_eq!(a.pow(BigInt::from(1)).value, BigInt::from(3)); // a^1 == a
-        // フェルマーの小定理: a^(p-1) == 1
+                                                                   // フェルマーの小定理: a^(p-1) == 1
         assert_eq!(a.pow(BigInt::from(6)).value, BigInt::from(1));
     }
 
