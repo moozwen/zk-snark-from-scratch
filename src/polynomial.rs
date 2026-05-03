@@ -179,31 +179,6 @@ impl Polynomial {
         let new_coeffs = self.coefficients.iter().map(|c| c * &factor).collect();
         Polynomial::new(new_coeffs)
     }
-
-    // 係数がゼロの項を末尾から削除してきれいにする（正規化）
-    pub fn trim(&self) -> Polynomial {
-        let mut coeffs = self.coefficients.clone();
-        if coeffs.is_empty() {
-            return self.clone();
-        }
-
-        let zero = BigInt::from(0);
-
-        // 末尾から0を探して消す
-        while coeffs.len() > 1 {
-            if let Some(last) = coeffs.last() {
-                if last.value == zero {
-                    coeffs.pop();
-                } else {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-
-        Polynomial::new(coeffs)
-    }
 }
 
 impl<'a, 'b> Add<&'b Polynomial> for &'a Polynomial {
