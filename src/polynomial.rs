@@ -109,7 +109,7 @@ impl Polynomial {
 
     // ラグランジュ補間
     // y_values: x=0, x=1, x=2, ... に対応する y座標のリスト
-    pub fn lagrange_interpolation(y_values: &Vec<FieldElement>) -> Polynomial {
+    pub fn lagrange_interpolation(y_values: &[FieldElement]) -> Polynomial {
         if y_values.is_empty() {
             return Polynomial::new(vec![]);
         }
@@ -163,7 +163,9 @@ impl Polynomial {
             }
 
             // 分母の逆数を計算して、分子にかける（割り算の代わり）
-            let denom_inv = denominator.inverse().expect("leading coefficient is zero");
+            let denom_inv = denominator
+                .inverse()
+                .expect("xi - xj is non-zero by construction (i != j");
             let basis_poly = numerator.scale(denom_inv);
 
             // 高さをあわせて合計に足す： total += y_i * basis_poly
