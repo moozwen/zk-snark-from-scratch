@@ -291,3 +291,145 @@ impl std::fmt::Display for Polynomial {
         write!(f, "{}", if s.is_empty() { "0".to_string() } else { s })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const P: i64 = 7;
+
+    fn fe(v: i64) -> FieldElement {
+        FieldElement::new(v, P)
+    }
+
+    fn poly(coeffs: &[i64]) -> Polynomial {
+        Polynomial::new(coeffs.iter().map(|&c| fe(c)).collect())
+    }
+
+    #[test]
+    fn new_strips_trailing_zeros() {
+        // [1, 2, 0, 0] -> [1, 2]
+        let p = poly(&[1, 2, 0, 0]);
+        assert_eq!(p.coefficients, vec![fe(1), fe(2)]);
+    }
+
+    #[test]
+    fn new_keeps_single_zero_for_zero_polynomial() {
+        let p = poly(&[0, 0, 0]);
+        assert_eq!(p.coefficients, vec![fe(0)]);
+    }
+
+    #[test]
+    fn degree_basic_cases() {
+        assert_eq!(poly(&[5]).degree(), 0);
+        assert_eq!(poly(&[1, 2]).degree(), 1);
+        assert_eq!(poly(&[1, 0, 3]).degree(), 2);
+    }
+
+    #[test]
+    fn evaluate_uses_horner() {
+        // P(x) = 1 + 2x; P(3) = 7 ≡ 0 (mod 7)
+        let p = poly(&[1, 2]);
+        assert_eq!(p.evaluate(&fe(3)), fe(0));
+    }
+
+    #[test]
+    fn add_handles_different_lengths() {
+        // (1 + 2x) + (3 + x^2) = 4 + 2x + x^2
+        let a = poly(&[1, 2]);
+        let b = poly(&[3, 0, 1]);
+        assert_eq!((&a + &b).coefficients, vec![fe(4), fe(2), fe(1)]);
+    }
+
+    #[test]
+    fn sub_normalizes_negative_results() {
+        // (3 + x^2) - (1 + 2x) = 2 - 2x + x^2 ≡ 2 + 5x + x^2 (mod 7)
+        let a = poly(&[3, 0, 1]);
+        let b = poly(&[1, 2]);
+        assert_eq!((&a - &b).coefficients, vec![fe(2), fe(5), fe(1)]);
+    }
+
+    #[test]
+    fn mul_basic() {
+        // (1 + x)(1 - x) = 1 - x^2 ≡ 1 + 6x^2 (mod 7)
+        let a = poly(&[1, 1]);
+        let b = poly(&[1, -1]);
+        assert_eq!((&a * &b).coefficients, vec![fe(1), fe(0), fe(6)]);
+    }
+
+    #[test]
+    fn div_rem_exact_division() {
+        // (x^2 - 1) / (x - 1) = x + 1, remainder 0
+        let dividend = poly(&[-1, 0, 1]);
+        let divisor = poly(&[-1, 1]);
+        let (q, r) = dividend.div_rem(&divisor);
+        assert_eq!(q.coefficients, vec![fe(1), fe(1)]);
+        assert_eq!(r.coefficients, vec![fe(0)]);
+    }
+
+    #[test]
+    fn div_rem_with_remainder() {
+        // (x^2 + 1) / x = x, remainder 1
+        let dividend = poly(&[1, 0, 1]);
+        let divisor = poly(&[0, 1]);
+        let (q, r) = dividend.div_rem(&divisor);
+        assert_eq!(q.coefficients, vec![fe(0), fe(1)]);
+        assert_eq!(r.coefficients, vec![fe(1)]);
+    }
+
+    #[test]
+    fn div_rem_dividend_smaller_than_divisor() {
+        // (x + 1) / x^2 → q = 0, r = x + 1
+        let dividend = poly(&[1, 1]);
+        let divisor = poly(&[0, 0, 1]);
+        let (q, r) = dividend.div_rem(&divisor);
+        assert_eq!(q.coefficients, vec![fe(0)]);
+        assert_eq!(r.coefficients, vec![fe(1), fe(1)]);
+    }
+
+    #[test]
+    #[should_panic(expected = "0多項式")]
+    fn div_rem_by_zero_polynomial_panics() {
+        let dividend = poly(&[1, 1]);
+        let divisor = poly(&[0]);
+        let _ = dividend.div_rem(&divisor);
+    }
+
+    #[test]
+    fn lagrange_interpolation_recovers_known_points() {
+        // y_i = (i + 1)^2 mod 7 → [1, 4, 2]
+        let y = vec![fe(1), fe(4), fe(2)];
+        let p = Polynomial::lagrange_interpolation(&y);
+        assert_eq!(p.evaluate(&fe(0)), fe(1));
+        assert_eq!(p.evaluate(&fe(1)), fe(4));
+        assert_eq!(p.evaluate(&fe(2)), fe(2));
+    }
+
+    #[test]
+    fn lagrange_interpolation_single_point_is_constant() {
+        let y = vec![fe(5)];
+        let p = Polynomial::lagrange_interpolation(&y);
+        assert_eq!(p.evaluate(&fe(0)), fe(5));
+        assert_eq!(p.evaluate(&fe(99)), fe(5));
+    }
+
+    #[test]
+    fn scale_multiplies_each_coefficient() {
+        // (1 + 2x).scale(3) = 3 + 6x
+        let p = poly(&[1, 2]);
+        let scaled = p.scale(&fe(3));
+        assert_eq!(scaled.coefficients, vec![fe(3), fe(6)]);
+    }
+
+    #[test]
+    fn display_formats_polynomial() {
+        // 1 + 0x + 2x^2 → "2x^2 + 1"
+        let p = poly(&[1, 0, 2]);
+        assert_eq!(format!("{}", p), "2x^2 + 1");
+    }
+
+    #[test]
+    fn display_zero_polynomial() {
+        assert_eq!(format!("{}", poly(&[0])), "0");
+    }
+}
