@@ -166,10 +166,10 @@ impl Polynomial {
             let denom_inv = denominator
                 .inverse()
                 .expect("xi - xj is non-zero by construction (i != j");
-            let basis_poly = numerator.scale(denom_inv);
+            let basis_poly = numerator.scale(&denom_inv);
 
             // 高さをあわせて合計に足す： total += y_i * basis_poly
-            let weighted_poly = basis_poly.scale(y_i.clone());
+            let weighted_poly = basis_poly.scale(y_i);
             total_poly = &total_poly + &weighted_poly;
         }
 
@@ -177,8 +177,8 @@ impl Polynomial {
     }
 
     // スカラー倍（係数を全部 k 倍する）
-    pub fn scale(&self, factor: FieldElement) -> Polynomial {
-        let new_coeffs = self.coefficients.iter().map(|c| c * &factor).collect();
+    pub fn scale(&self, factor: &FieldElement) -> Polynomial {
+        let new_coeffs = self.coefficients.iter().map(|c| c * factor).collect();
         Polynomial::new(new_coeffs)
     }
 }

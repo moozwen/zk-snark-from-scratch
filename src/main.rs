@@ -97,13 +97,14 @@ fn compute_h_poly(
     let mut b = Polynomial::new(vec![zero.clone()]);
     let mut c = Polynomial::new(vec![zero.clone()]);
     for (i, w) in witness.iter().enumerate() {
-        a = &a + &qap.a_polys[i].scale(w.clone());
-        b = &b + &qap.b_polys[i].scale(w.clone());
-        c = &c + &qap.c_polys[i].scale(w.clone());
+        a = &a + &qap.a_polys[i].scale(w);
+        b = &b + &qap.b_polys[i].scale(w);
+        c = &c + &qap.c_polys[i].scale(w);
     }
 
     // P(x) = A(x)*B(x) - C(x)
-    let p_poly = &(&a * &b) + &c.scale(&zero - &one);
+    let minus_one = &zero - &one;
+    let p_poly = &(&a * &b) + &c.scale(&minus_one);
 
     // Z(x) = (x - 0)(x - 1)...(x - (n - 1))
     let mut z_poly = Polynomial::new(vec![one.clone()]);

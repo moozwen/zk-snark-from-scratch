@@ -162,20 +162,20 @@ mod tests {
         let mut c_poly = Polynomial::new(vec![zero_fe.clone()]);
 
         for (i, w_val) in witness_fe.iter().enumerate() {
-            let scaled_a = qap.a_polys[i].scale(w_val.clone());
+            let scaled_a = qap.a_polys[i].scale(w_val);
             a_poly = &a_poly + &scaled_a;
 
-            let scaled_b = qap.b_polys[i].scale(w_val.clone());
+            let scaled_b = qap.b_polys[i].scale(w_val);
             b_poly = &b_poly + &scaled_b;
 
-            let scaled_c = qap.c_polys[i].scale(w_val.clone());
+            let scaled_c = qap.c_polys[i].scale(w_val);
             c_poly = &c_poly + &scaled_c;
         }
 
         // P(x) = A(x) * B(x) - C(x)
         let ab = &a_poly * &b_poly;
         let minus_one = &zero_fe - &one_fe;
-        let neg_c = c_poly.scale(minus_one);
+        let neg_c = c_poly.scale(&minus_one);
         let p_poly = &ab + &neg_c;
 
         // Z(x) = (x-0)(x-1)(x-2)...
