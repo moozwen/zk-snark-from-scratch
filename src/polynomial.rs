@@ -46,9 +46,9 @@ impl Polynomial {
     /// # 例
     //
     /// ```text
-    /// // [1, 2, 0, 0] → [1, 2]  (1 + 2x)
-    /// // [0, 0, 0]    → [0]     (定数 0)
-    ///
+    /// [1, 2, 0, 0] → [1, 2]  (1 + 2x)
+    /// [0, 0, 0]    → [0]     (定数 0)
+    ///```
     pub fn new(mut coefficients: Vec<FieldElement>) -> Self {
         while coefficients.len() > 1 && coefficients.last().unwrap().value == BigInt::from(0) {
             coefficients.pop();
