@@ -16,6 +16,20 @@ use crate::field::FieldElement;
 use num_bigint::BigInt;
 use std::ops::{Add, Div, Mul, Sub};
 
+/// 有限体係数の多項式を dense 表現で保持する。
+///
+/// `coefficients[i]` が x^i の係数。例： `[1, 2, 3]` は `1 + 2x + 3x^2` を表す。
+/// 末尾の 0 係数は [`Polinomial::new`] で自動的に取り除かれるため、
+/// 意味的な次数と `coefficients.len() - 1` は常に一致する。
+///
+/// # 例
+///
+/// ```text
+/// let p = Polynomial::new(vec![
+///     FieldElement::new(1, 7),
+///     FieldElement::new(2, 7),
+/// ]); // 1 + 2x in F_7
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Polynomial {
     // coefficients[i] が x^i の係数
@@ -24,15 +38,28 @@ pub struct Polynomial {
 }
 
 impl Polynomial {
+    /// 係数列から多項式を生成する。末尾の 0 係数は自動的に削除される。
+    ///
+    /// 全係数が 0 のときは `[0]` を残す（空 vec にはならない）。
+    /// 空 vec を渡した場合は空のままとなる。
+    ///
+    /// # 例
+    //
+    /// ```text
+    /// // [1, 2, 0, 0] → [1, 2]  (1 + 2x)
+    /// // [0, 0, 0]    → [0]     (定数 0)
+    ///
     pub fn new(mut coefficients: Vec<FieldElement>) -> Self {
-        // 高次の係数が 0 の場合、その項を取り除く（例: 1 + 2x + 0x^2 -> 1 + 2x
-        // ただし すべての係数が 0 の場合は [0] を返す
         while coefficients.len() > 1 && coefficients.last().unwrap().value == BigInt::from(0) {
             coefficients.pop();
         }
         Polynomial { coefficients }
     }
 
+    /// 多項式の次数を返す。
+    /// 
+    /// 定数 `c` の次数は 0、空多項式 (`coefficients.is_empty()`) の場合も 0 を返す。
+    /// 両者を区別したい場合は `coefficients.is_empty()` で判定すること。
     pub fn degree(&self) -> usize {
         if self.coefficients.is_empty() {
             return 0;
@@ -40,9 +67,21 @@ impl Polynomial {
         self.coefficients.len() - 1
     }
 
-    // P(x) を計算する
+    /// 与えられた `x` で多項式を評価し、`P(x)` を返す。
+    ///
+    /// ホーナー法で実装しており、係数長 `n` に対して計算量は `O(n)`。
+    ///
+    /// # 例
+    ///
+    /// ```text
+    /// // P(x) = 1 + 2x in F_7;  P(3) = 7 ≡ 0 (mod 7)
+    /// let p = Polynomial::new(vec![
+    ///     FieldElement::new(1, 7),
+    ///     FieldElement::new(2, 7),
+    /// ]);
+    /// assert_eq!(p.evaluate(&FieldElement::new(3, 7)).value, BigInt::from(0));
+    /// ```
     pub fn evaluate(&self, x: &FieldElement) -> FieldElement {
-        // ホーナー法: a_n*x^n + ... + a_0 = (...((a_n*x + a_{n-1}*x + a_{n-2})...))
         let mut result = FieldElement::new(BigInt::from(0), x.p.clone());
         for coeff in self.coefficients.iter().rev() {
             result = &(&result * x) + coeff;
@@ -50,7 +89,15 @@ impl Polynomial {
         result
     }
 
-    // 商と余りを返す（Quotient, Remainder）
+    /// 多項式の長除法を行い、`(quotient, remainder)` を返す。
+    ///
+    /// 結果は不変式 `self == divisor * quotient + remainder` を満たし、
+    /// `remainder` の次数は `divisor` より厳密に小さい。
+    /// 被除数の次数が除数より小さいときは `(0, self)` を返す。
+    ///
+    /// # Panics
+    ///
+    /// `divisor` が 0 多項式の場合 panic する。
     pub fn div_rem(&self, divisor: &Polynomial) -> (Polynomial, Polynomial) {
         let p = self.coefficients[0].p.clone();
 
@@ -107,8 +154,19 @@ impl Polynomial {
         (Polynomial::new(quotient_coeffs), remainder)
     }
 
-    // ラグランジュ補間
-    // y_values: x=0, x=1, x=2, ... に対応する y座標のリスト
+    /// `y_values[i]` を `x = i` での値とする多項式を補間して返す。
+    ///
+    /// n 点から n-1 次以下の多項式が一意に定まる。計算量は `O(n^2)`。
+    /// 補間点は `x = 0, 1, 2, ..., n-1` に固定（QAP 構築に最適化）。
+    ///
+    /// # 例
+    ///
+    /// ```text
+    /// // y_i = (i+1)^2 mod 7  → [1, 4, 2]
+    /// let y = vec![fe(1), fe(4), fe(2)];
+    /// let p = Polynomial::lagrange_interpolation(&y);
+    /// assert_eq!(p.evaluate(&fe(2)), fe(2));
+    /// ```
     pub fn lagrange_interpolation(y_values: &[FieldElement]) -> Polynomial {
         if y_values.is_empty() {
             return Polynomial::new(vec![]);
@@ -176,13 +234,14 @@ impl Polynomial {
         total_poly
     }
 
-    // スカラー倍（係数を全部 k 倍する）
+    /// 全係数に `factor` を掛けたスカラー倍多項式を返す。
     pub fn scale(&self, factor: &FieldElement) -> Polynomial {
         let new_coeffs = self.coefficients.iter().map(|c| c * factor).collect();
         Polynomial::new(new_coeffs)
     }
 }
 
+/// 多項式の加算: 同じ次数の係数同士を加算する。
 impl<'a, 'b> Add<&'b Polynomial> for &'a Polynomial {
     type Output = Polynomial;
 
@@ -216,6 +275,7 @@ impl<'a, 'b> Add<&'b Polynomial> for &'a Polynomial {
     }
 }
 
+/// 多項式の減算: 同じ次数の係数同士を減算する。
 impl<'a, 'b> Sub<&'b Polynomial> for &'a Polynomial {
     type Output = Polynomial;
 
@@ -235,6 +295,7 @@ impl<'a, 'b> Sub<&'b Polynomial> for &'a Polynomial {
     }
 }
 
+/// 多項式の乗算: 各係数を畳み込んで `i + j` 次の項に集約する（計算量 `O(n*m)`）。
 impl<'a, 'b> Mul<&'b Polynomial> for &'a Polynomial {
     type Output = Polynomial;
 
