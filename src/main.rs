@@ -115,12 +115,6 @@ fn compute_h_poly(
 
     // h(x) = P(x) / Z(x)
     let (h, remainder) = p_poly.div_rem(&z_poly);
-    assert!(
-        remainder
-            .coefficients
-            .iter()
-            .all(|c| c.value == BigInt::from(0)),
-        "P(x) is not divisible by Z(x)"
-    );
+    assert!(remainder.is_zero(), "P(x) is not divisible by Z(x)");
     h
 }

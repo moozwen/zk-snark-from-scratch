@@ -192,11 +192,7 @@ mod tests {
         let (h_poly, remainder) = p_poly.div_rem(&z_poly);
 
         // 余りがゼロであることを確認
-        let is_divisible = remainder
-            .coefficients
-            .iter()
-            .all(|c| c.value == BigInt::from(0));
-        assert!(is_divisible, "P(x) が Z(x) で割り切れません");
+        assert!(remainder.is_zero(), "P(x) が Z(x) で割り切れません");
 
         // h(x) の係数を Fr に変換
         let h_coeffs = polynomial_to_fr_vec(&h_poly);

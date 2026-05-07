@@ -57,7 +57,7 @@ impl Polynomial {
     }
 
     /// 多項式の次数を返す。
-    /// 
+    ///
     /// 定数 `c` の次数は 0、空多項式 (`coefficients.is_empty()`) の場合も 0 を返す。
     /// 両者を区別したい場合は `coefficients.is_empty()` で判定すること。
     pub fn degree(&self) -> usize {
@@ -65,6 +65,14 @@ impl Polynomial {
             return 0;
         }
         self.coefficients.len() - 1
+    }
+
+    /// 多項式が 0 多項式かどうかを返す。
+    ///
+    /// [`Polynomial::new`] の正規化ルール（全 0 のとき `[0]` を残す）に依存。
+    /// よって「係数 1 個 かつ それが 0」という単純判定を行う。
+    pub fn is_zero(&self) -> bool {
+        self.coefficients.len() == 1 && self.coefficients[0].value == BigInt::from(0)
     }
 
     /// 与えられた `x` で多項式を評価し、`P(x)` を返す。
@@ -102,7 +110,7 @@ impl Polynomial {
         let p = self.coefficients[0].p.clone();
 
         // 0 で割ろうとした場合はパニック
-        if divisor.coefficients.len() == 1 && divisor.coefficients[0].value == BigInt::from(0) {
+        if divisor.is_zero() {
             panic!("0多項式で割ることはできません");
         }
 
@@ -121,10 +129,7 @@ impl Polynomial {
         let mut remainder = self.clone();
 
         // 長除法のメインループ
-        while remainder.degree() >= divisor.degree()
-            && !(remainder.coefficients.len() == 1
-                && remainder.coefficients[0].value == BigInt::from(0))
-        {
+        while remainder.degree() >= divisor.degree() && !remainder.is_zero() {
             let deg_r = remainder.degree();
             let deg_d = divisor.degree();
 
@@ -492,5 +497,18 @@ mod tests {
     #[test]
     fn display_zero_polynomial() {
         assert_eq!(format!("{}", poly(&[0])), "0");
+    }
+
+    #[test]
+    fn iz_zero_returns_true_for_zero_polynomial() {
+        assert!(poly(&[0]).is_zero());
+        assert!(poly(&[0, 0, 0]).is_zero()); // new() にて [0] に正規化される
+    }
+    
+    #[test]
+    fn is_zero_returns_false_for_nonzero_polynomial() {
+        assert!(!poly(&[1]).is_zero());     // 定数 1
+        assert!(!poly(&[0, 1]).is_zero());  // x
+        assert!(!poly(&[1, 2]).is_zero());  // 1 + 2x
     }
 }
