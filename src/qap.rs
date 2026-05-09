@@ -39,7 +39,7 @@ impl Qap {
         // すべての変数（列）についてループ
         for i in 0..num_vars {
             // 1. Matrix A の i番目の列を抜き出して多項式化
-            let points_a = extract_column(cs, i, 'A');
+            let points_a = extract_column(cs, i, Matrix::A);
 
             // y座標だけのリストにする（x座標は 0,1,2... と決まっているため、interpolation側で処理される想定）
             // ※ lagrange_interpolation の実装に合わせて、(x,y) を渡すか y だけ渡すか確認してください。
@@ -50,12 +50,12 @@ impl Qap {
             a_polys.push(Polynomial::lagrange_interpolation(&dense_points_a));
 
             // 2. Matrix B
-            let points_b = extract_column(cs, i, 'B');
+            let points_b = extract_column(cs, i, Matrix::B);
             let dense_points_b = to_dense_vector(points_b, cs.constraints.len(), cs);
             b_polys.push(Polynomial::lagrange_interpolation(&dense_points_b));
 
             // 3. Matrix C
-            let points_c = extract_column(cs, i, 'C');
+            let points_c = extract_column(cs, i, Matrix::C);
             let dense_points_c = to_dense_vector(points_c, cs.constraints.len(), cs);
             c_polys.push(Polynomial::lagrange_interpolation(&dense_points_c));
         }
@@ -98,22 +98,28 @@ fn to_dense_vector(
     dense
 }
 
+// どの行列（A / B / C）の列を抜き出すかを指定するセレクタ
+enum Matrix {
+    A,
+    B,
+    C,
+}
+
 // 行列の「ある列（変数 index）」の係数をすべて抜き出すヘルパー関数
 // 戻り値： [(制約番号, 係数), (制約番号, 係数), ...]
 fn extract_column(
     cs: &ConstraintSystem,
     var_idx: usize,
-    matrix_selector: char, // 'A', 'B', or 'C'
+    matrix: Matrix,
 ) -> Vec<(usize, FieldElement)> {
     let mut points = Vec::new();
 
     for (i, constraint) in cs.constraints.iter().enumerate() {
         // A, B, C どの行列（LinearCombination）を見るか？
-        let lc = match matrix_selector {
-            'A' => &constraint.a,
-            'B' => &constraint.b,
-            'C' => &constraint.c,
-            _ => panic!("Invalid matrix selector"),
+        let lc = match matrix {
+            Matrix::A => &constraint.a,
+            Matrix::B => &constraint.b,
+            Matrix::C => &constraint.c,
         };
 
         // その制約式の中に ターゲット変数の係数はあるか？
