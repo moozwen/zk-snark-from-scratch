@@ -31,39 +31,32 @@ impl Qap {
     // R1CS から QAP を生成するメイン関数
     pub fn from_r1cs(cs: &ConstraintSystem) -> Self {
         let num_vars = cs.next_var_index; // 変数の総数（列の数）
+        let num_constraints = cs.constraints.len();
+        let p = cs
+            .assignments
+            .first()
+            .expect("CS未初期化")
+            .as_ref()
+            .unwrap()
+            .p
+            .clone();
 
-        let mut a_polys = Vec::new();
-        let mut b_polys = Vec::new();
-        let mut c_polys = Vec::new();
+        // 指定行列の各変数列を Lagrange 補間で多項式化する
+        let interpolate_column = |matrix: Matrix| -> Vec<Polynomial> {
+            (0..num_vars)
+                .map(|i| {
+                    let points = extract_column(cs, i, matrix);
+                    let dense = to_dense_vector(points, num_constraints, &p);
 
-        // すべての変数（列）についてループ
-        for i in 0..num_vars {
-            // 1. Matrix A の i番目の列を抜き出して多項式化
-            let points_a = extract_column(cs, i, Matrix::A);
-
-            // y座標だけのリストにする（x座標は 0,1,2... と決まっているため、interpolation側で処理される想定）
-            // ※ lagrange_interpolation の実装に合わせて、(x,y) を渡すか y だけ渡すか確認してください。
-            //   前回の実装では `y_values: &Vec<FieldElement>` (yだけ) でしたね。
-            //   ただし、extract_column はスパース（0を飛ばす）なデータを返すので、
-            //   ここで「密なベクトル（0埋め）」に変換する必要があります。
-            let dense_points_a = to_dense_vector(points_a, cs.constraints.len(), cs);
-            a_polys.push(Polynomial::lagrange_interpolation(&dense_points_a));
-
-            // 2. Matrix B
-            let points_b = extract_column(cs, i, Matrix::B);
-            let dense_points_b = to_dense_vector(points_b, cs.constraints.len(), cs);
-            b_polys.push(Polynomial::lagrange_interpolation(&dense_points_b));
-
-            // 3. Matrix C
-            let points_c = extract_column(cs, i, Matrix::C);
-            let dense_points_c = to_dense_vector(points_c, cs.constraints.len(), cs);
-            c_polys.push(Polynomial::lagrange_interpolation(&dense_points_c));
-        }
+                    Polynomial::lagrange_interpolation(&dense)
+                })
+                .collect()
+        };
 
         Qap {
-            a_polys,
-            b_polys,
-            c_polys,
+            a_polys: interpolate_column(Matrix::A),
+            b_polys: interpolate_column(Matrix::B),
+            c_polys: interpolate_column(Matrix::C),
         }
     }
 }
@@ -73,21 +66,9 @@ impl Qap {
 fn to_dense_vector(
     sparse_points: Vec<(usize, FieldElement)>,
     num_constraints: usize,
-    cs: &ConstraintSystem, // ゼロ生成用に p を取得するために必要
+    p: &BigInt,
 ) -> Vec<FieldElement> {
-    let p = if !sparse_points.is_empty() {
-        sparse_points[0].1.p.clone()
-    } else {
-        cs.assignments
-            .first()
-            .expect("CS未初期化")
-            .as_ref()
-            .unwrap()
-            .p
-            .clone()
-    };
-
-    let zero = FieldElement::new(BigInt::from(0), p.clone());
+    let zero = FieldElement::new(0, p.clone());
     let mut dense = vec![zero; num_constraints];
 
     for (row_idx, val) in sparse_points {
@@ -99,6 +80,7 @@ fn to_dense_vector(
 }
 
 // どの行列（A / B / C）の列を抜き出すかを指定するセレクタ
+#[derive(Clone, Copy)]
 enum Matrix {
     A,
     B,
