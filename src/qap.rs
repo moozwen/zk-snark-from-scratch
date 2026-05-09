@@ -79,7 +79,7 @@ fn to_dense_vector(
         sparse_points[0].1.p.clone()
     } else {
         cs.assignments
-            .get(0)
+            .first()
             .expect("CS未初期化")
             .as_ref()
             .unwrap()
