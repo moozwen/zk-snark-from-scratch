@@ -14,8 +14,6 @@
 //! - [`ConstraintSystem::add`]: 足し算ゲート
 //! - [`ConstraintSystem::add_const`]: 定数加算ゲート
 
-use num_bigint::BigInt;
-
 use crate::field::FieldElement;
 
 // R1CS において変数は「インデックス」
@@ -39,6 +37,12 @@ impl LinearCombination {
 
     pub fn add_term(&mut self, var: Variable, coeff: FieldElement) {
         self.terms.push((var, coeff));
+    }
+}
+
+impl Default for LinearCombination {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -71,7 +75,7 @@ impl ConstraintSystem {
         if var.0 < self.assignments.len() {
             self.assignments[var.0] = Some(value);
         } else {
-            panic!("存在しない変数に代入しようとしました");
+            panic!("variable {} is out of bounds; alloc it first", var.0);
         }
     }
 
@@ -90,8 +94,9 @@ impl ConstraintSystem {
         self.assignments
             .iter()
             .map(|val| {
-                val.clone()
-                    .expect("未定義の変数があります！値をassignしてください")
+                val.as_ref()
+                    .expect("witness contains an unassigned variable")
+                    .clone()
             })
             .collect()
     }
@@ -117,12 +122,12 @@ impl ConstraintSystem {
         // 2. 値の計算（Witness 生成）
         // a と b の値を読み出して掛け算し、c に代入する
         let val_a = self.assignments[a.0]
-            .clone()
-            .expect("変数aの値が未設定です");
+            .as_ref()
+            .expect("variable a is unassigned");
         let val_b = self.assignments[b.0]
-            .clone()
-            .expect("変数bの値が未設定です");
-        let val_c = &val_a * &val_b;
+            .as_ref()
+            .expect("variable b is unassigned");
+        let val_c = val_a * val_b;
         self.assign(c, val_c);
 
         // 3. 制約の追加（a * b = c）
@@ -141,8 +146,15 @@ impl ConstraintSystem {
     // ヘルパー関数： 係数 1 のFieldElement を返す
     fn one(&self) -> FieldElement {
         // assignments[0] (CS_ONE) から p を取得して 1 を作る
-        let p = self.assignments[0].as_ref().unwrap().p.clone();
-        FieldElement::new(BigInt::from(1), p)
+        let p = self
+            .assignments
+            .first()
+            .expect("constraint system not initialized; call init_one() first")
+            .as_ref()
+            .expect("CS_ONE is unassigned")
+            .p
+            .clone();
+        FieldElement::new(1, p)
     }
 
     // 足し算ゲート： (a + b) * 1 = c
@@ -151,8 +163,12 @@ impl ConstraintSystem {
         let c = self.alloc_variable();
 
         // 2. 値の計算（Witness 生成）
-        let val_a = self.assignments[a.0].as_ref().expect("a is missing");
-        let val_b = self.assignments[b.0].as_ref().expect("b is missing");
+        let val_a = self.assignments[a.0]
+            .as_ref()
+            .expect("variable a is unassigned");
+        let val_b = self.assignments[b.0]
+            .as_ref()
+            .expect("variable b is unassigned");
         self.assign(c, val_a + val_b);
 
         // 3. 制約： (a + b) * 1 = c
@@ -179,7 +195,9 @@ impl ConstraintSystem {
         let c = self.alloc_variable();
 
         // 2. 値の計算
-        let val_a = self.assignments[a.0].as_ref().expect("a is missing");
+        let val_a = self.assignments[a.0]
+            .as_ref()
+            .expect("variable a is unassigned");
         self.assign(c, val_a + &constant); // 定数を足す
 
         // 3. 制約： (a + (1 * const)) * 1 = c
@@ -199,5 +217,11 @@ impl ConstraintSystem {
         self.enforce(lc_a, lc_b, lc_c);
 
         c
+    }
+}
+
+impl Default for ConstraintSystem {
+    fn default() -> Self {
+        Self::new()
     }
 }
