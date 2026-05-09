@@ -114,7 +114,7 @@ impl Polynomial {
             panic!("0多項式で割ることはできません");
         }
 
-        // 被除数の次数が除数より引く場合、商は 0、余りは被除数自身
+        // 被除数の次数が除数より低い場合、商は 0、余りは被除数自身
         if self.degree() < divisor.degree() {
             return (
                 Polynomial::new(vec![FieldElement::new(BigInt::from(0), p.clone())]),
@@ -133,7 +133,7 @@ impl Polynomial {
             let deg_r = remainder.degree();
             let deg_d = divisor.degree();
 
-            // a. 最高次の項同士の割り算（有限体なので逆元をかける）
+            // a. 最高次の項同士の割り算
             let leading_r = remainder.coefficients.last().unwrap();
             let leading_d = divisor.coefficients.last().unwrap();
             let ratio = leading_r.div(leading_d); // FieldElement の割り算
@@ -205,9 +205,10 @@ impl Polynomial {
             let xi = FieldElement::new(BigInt::from(i), p.clone());
 
             for j in 0..num_points {
+                // 自分自身はスキップ
                 if i == j {
                     continue;
-                } // 自分自身はスキップ
+                }
 
                 let xj = FieldElement::new(BigInt::from(j), p.clone());
 
