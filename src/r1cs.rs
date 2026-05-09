@@ -4,15 +4,15 @@
 //! `A·B = C` の形式で表現し、Witness を生成する。
 //!
 //! ## 主要型
-//! - [`ConstraintSystem`]: 制約と変数代入を保持する回路全体
-//! - [`Variable`]: 変数（インデックス）。[`CS_ONE`] は定数 1 を表す予約変数
-//! - [`LinearCombination`]: 変数の線形結合
-//! - [`Constraint`]: 単一の `A·B = C` 制約
+//! - [`ConstraintSystem`][]: 制約と変数代入を保持する回路全体
+//! - [`Variable`][]: 変数（インデックス）。[`CS_ONE`] は定数 1 を表す予約変数
+//! - [`LinearCombination`][]: 変数の線形結合
+//! - [`Constraint`][]: 単一の `A·B = C` 制約
 //!
 //! ## 回路構築 API
-//! - [`ConstraintSystem::mul`]: 掛け算ゲート
-//! - [`ConstraintSystem::add`]: 足し算ゲート
-//! - [`ConstraintSystem::add_const`]: 定数加算ゲート
+//! - [`ConstraintSystem::mul`][]: 掛け算ゲート
+//! - [`ConstraintSystem::add`][]: 足し算ゲート
+//! - [`ConstraintSystem::add_const`][]: 定数加算ゲート
 
 use crate::field::FieldElement;
 
