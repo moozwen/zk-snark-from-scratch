@@ -147,7 +147,7 @@ mod tests {
 
         // === 4. ウィットネスを Fr に変換 ===
         let witness_fe = cs.generate_witness();
-        let witness: Vec<Fr> = witness_fe.iter().map(|w| field_element_to_fr(w)).collect();
+        let witness: Vec<Fr> = witness_fe.iter().map(field_element_to_fr).collect();
 
         // === 5. h(x) を計算する ===
         // A(x) * B(x) - C(x) を Z(x) で割った商が h(x)

@@ -69,7 +69,7 @@ fn main() {
     let u_polys = polys_to_fr_vecs(&qap.a_polys);
     let v_polys = polys_to_fr_vecs(&qap.b_polys);
     let w_polys = polys_to_fr_vecs(&qap.c_polys);
-    let witness: Vec<Fr> = witness_fe.iter().map(|w| field_element_to_fr(w)).collect();
+    let witness: Vec<Fr> = witness_fe.iter().map(field_element_to_fr).collect();
     let h_coeffs = polynomial_to_fr_vec(&h_poly);
     let proof = prove_simple(&u_polys, &v_polys, &w_polys, &witness, &h_coeffs, &srs);
 
