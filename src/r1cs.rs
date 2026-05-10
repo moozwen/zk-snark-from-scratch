@@ -16,13 +16,24 @@
 
 use crate::field::FieldElement;
 
-// R1CS において変数は「インデックス」
+/// 制約系内の変数を識別するインデックス。
+///
+/// `Variable(0)` は定数 1 に予約済み（[`CS_ONE`]）。通常の変数は
+/// [`ConstraintSystem::alloc_variable`] で発行される。
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Variable(pub usize);
 
-// インデックス 0 は常に 1 を表す
+/// 定数 1 を表す予約変数。`assignments[0]` に値 1 が入っていることが前提。
+///
+/// 制約系を作った直後に [`ConstraintSystem::init_one`] を呼んで初期化する。
 pub const CS_ONE: Variable = Variable(0);
 
+/// 変数の線形結合 `Σ c_i · x_i` を表す。
+///
+/// 例： `3x + 2y + 5` は
+/// `[(Variable(1), 3), (Variable(2), 2), (CS_ONE, 5)]` という並び。
+///
+/// 同一変数の重複は許され、自動マージは行わない。
 #[derive(Clone, Debug)]
 pub struct LinearCombination {
     // (変数のインデックス, その係数) のリスト
@@ -31,10 +42,14 @@ pub struct LinearCombination {
 }
 
 impl LinearCombination {
+    /// 空の線形結合を生成する。
     pub fn new() -> Self {
         Self { terms: Vec::new() }
     }
 
+    /// 項 `coeff · var` を末尾に追加する。
+    ///
+    /// 既存の同変数項とはマージせず、別エントリとして保持する。
     pub fn add_term(&mut self, var: Variable, coeff: FieldElement) {
         self.terms.push((var, coeff));
     }
@@ -46,6 +61,10 @@ impl Default for LinearCombination {
     }
 }
 
+/// 単一の R1CS 制約 `A · B = C` を表す。
+///
+/// `A`, `B`, `C` はそれぞれ Witness ベクトルとの内積によりスカラー値となり、
+/// 「左辺どうしの積が右辺と一致するか」が証明対象になる。
 #[derive(Clone, Debug)]
 pub struct Constraint {
     pub a: LinearCombination,
@@ -53,6 +72,21 @@ pub struct Constraint {
     pub c: LinearCombination,
 }
 
+/// 算術回路全体を保持する制約系。
+///
+/// 制約のリストと、各変数の現在値（Witness 候補）を持つ。
+/// `mul` / `add` / `add_const` を使う前に [`init_one`](Self::init_one) を呼んで
+/// [`CS_ONE`] を初期化する必要がある（内部で係数 1 を作るときに参照するため）。
+///
+/// # 例
+///
+/// ```text
+/// let mut cs = ConstraintSystem::new();
+/// cs.init_one(FieldElement::new(1, 7));
+/// let x = cs.alloc_variable();
+/// cs.assign(x, FieldElement::new(3, 7));
+/// let y = cs.mul(x, x); // y = x^2
+/// ```
 pub struct ConstraintSystem {
     pub next_var_index: usize,
     pub constraints: Vec<Constraint>,
@@ -61,8 +95,11 @@ pub struct ConstraintSystem {
 }
 
 impl ConstraintSystem {
+    /// 空の制約系を生成する。
+    ///
+    /// 変数も制約もまだ存在しない状態。最初に [`init_one`](Self::init_one) を
+    /// 呼んで [`CS_ONE`] を確保してから使う。
     pub fn new() -> Self {
-        // インデックス 0 は定数 1 のために予約済みなので 1 から開始
         Self {
             next_var_index: 0,
             constraints: Vec::new(),
@@ -71,6 +108,9 @@ impl ConstraintSystem {
         }
     }
 
+    /// 変数 `var` に値 `value` を代入する。
+    ///
+    /// `var` が [`alloc_variable`](Self::alloc_variable) 未発行のときは panic する。
     pub fn assign(&mut self, var: Variable, value: FieldElement) {
         if var.0 < self.assignments.len() {
             self.assignments[var.0] = Some(value);
@@ -79,8 +119,11 @@ impl ConstraintSystem {
         }
     }
 
-    // 定数1（Index 0）を初期化するための専用メソッド
-    // ※ p（素数）が必要なので、外部から呼んでもらう
+    /// 定数 1 を保持する [`CS_ONE`] を初期化する。
+    ///
+    /// 内部で `Variable(0)` を確保して `one` を代入する。制約系を作った直後、
+    /// 他の `alloc_variable` を呼ぶ前に一度だけ呼び出すこと。
+    /// `FieldElement` から法 `p` を取得するため、外部から渡してもらう設計。
     pub fn init_one(&mut self, one: FieldElement) {
         // Index 0 がまだなければ作る
         if self.assignments.is_empty() {
@@ -89,7 +132,9 @@ impl ConstraintSystem {
         self.assign(CS_ONE, one);
     }
 
-    // 記録された値から Witness ベクトルを生成する
+    /// 全変数の現在値を Witness ベクトルとして取り出す。
+    ///
+    /// 未代入の変数（`None`）が残っていれば panic する。
     pub fn generate_witness(&self) -> Vec<FieldElement> {
         self.assignments
             .iter()
@@ -101,7 +146,9 @@ impl ConstraintSystem {
             .collect()
     }
 
-    // 新しい変数を「発行」する
+    /// 新しい変数を発行し、その [`Variable`] ハンドルを返す。
+    ///
+    /// 値は未代入（`None`）状態で確保される。`assign` で値を入れる必要がある。
     pub fn alloc_variable(&mut self) -> Variable {
         let var = Variable(self.next_var_index);
         self.next_var_index += 1;
@@ -109,18 +156,21 @@ impl ConstraintSystem {
         var
     }
 
-    // 回路に新しい制約（A * B = C）を追加する
+    /// 制約 `A · B = C` を制約系に直接追加する。
+    ///
+    /// 通常は `mul` / `add` / `add_const` 経由で間接的に呼ばれる。
     pub fn enforce(&mut self, a: LinearCombination, b: LinearCombination, c: LinearCombination) {
         self.constraints.push(Constraint { a, b, c });
     }
 
-    // 掛け算ゲート（a * b = c）を作成し、結果の変数 c を返す
+    /// 掛け算ゲートを追加する。
+    ///
+    /// 新変数 `c` を確保して `c = a * b` を計算し、制約 `(a) · (b) = (c)` を追加する。
+    /// 戻り値は `c`。
     pub fn mul(&mut self, a: Variable, b: Variable) -> Variable {
-        // 1. 結果用の変数 c を確保
         let c = self.alloc_variable();
 
-        // 2. 値の計算（Witness 生成）
-        // a と b の値を読み出して掛け算し、c に代入する
+        // 値の計算（Witness 生成）
         let val_a = self.assignments[a.0]
             .as_ref()
             .expect("variable a is unassigned");
@@ -130,7 +180,7 @@ impl ConstraintSystem {
         let val_c = val_a * val_b;
         self.assign(c, val_c);
 
-        // 3. 制約の追加（a * b = c）
+        // 制約: (a) * (b) = (c)
         let mut lc_a = LinearCombination::new();
         lc_a.add_term(a, self.one());
         let mut lc_b = LinearCombination::new();
@@ -143,9 +193,10 @@ impl ConstraintSystem {
         c
     }
 
-    // ヘルパー関数： 係数 1 のFieldElement を返す
+    /// 法 `p` のもとでの `FieldElement` 1 を返す。
+    ///
+    /// `assignments[0]` ([`CS_ONE`]) から法を取り出すため、`init_one` 済み前提。
     fn one(&self) -> FieldElement {
-        // assignments[0] (CS_ONE) から p を取得して 1 を作る
         let p = self
             .assignments
             .first()
@@ -157,12 +208,14 @@ impl ConstraintSystem {
         FieldElement::new(1, p)
     }
 
-    // 足し算ゲート： (a + b) * 1 = c
+    /// 足し算ゲートを追加する。
+    ///
+    /// 新変数 `c` を確保して `c = a + b` を計算し、
+    /// 制約 `(a + b) · 1 = (c)` を追加する。戻り値は `c`。
     pub fn add(&mut self, a: Variable, b: Variable) -> Variable {
-        // 1. 結果用変数 c を確保
         let c = self.alloc_variable();
 
-        // 2. 値の計算（Witness 生成）
+        // 値の計算
         let val_a = self.assignments[a.0]
             .as_ref()
             .expect("variable a is unassigned");
@@ -171,17 +224,14 @@ impl ConstraintSystem {
             .expect("variable b is unassigned");
         self.assign(c, val_a + val_b);
 
-        // 3. 制約： (a + b) * 1 = c
-        // A: a + b
+        // 制約： (a + b) * 1 = c
         let mut lc_a = LinearCombination::new();
         lc_a.add_term(a, self.one());
         lc_a.add_term(b, self.one());
 
-        // B: 1
         let mut lc_b = LinearCombination::new();
         lc_b.add_term(CS_ONE, self.one());
 
-        // C: c
         let mut lc_c = LinearCombination::new();
         lc_c.add_term(c, self.one());
 
@@ -190,27 +240,27 @@ impl ConstraintSystem {
         c
     }
 
-    // 定数の足し算： (a + const) * 1 = c
+    /// 定数加算ゲートを追加する。
+    ///
+    /// 新変数 `c` を確保して `c = a + k` を計算し、
+    /// 制約 `(a + k · 1) · 1 = (c)` を追加する。戻り値は `c`。
     pub fn add_const(&mut self, a: Variable, constant: FieldElement) -> Variable {
         let c = self.alloc_variable();
 
-        // 2. 値の計算
+        // 値の計算
         let val_a = self.assignments[a.0]
             .as_ref()
             .expect("variable a is unassigned");
-        self.assign(c, val_a + &constant); // 定数を足す
+        self.assign(c, val_a + &constant);
 
-        // 3. 制約： (a + (1 * const)) * 1 = c
-        // A: a * 1 + 1 * const
+        // 制約： (a + 1 * k) * 1 = c
         let mut lc_a = LinearCombination::new();
         lc_a.add_term(a, self.one());
         lc_a.add_term(CS_ONE, constant);
 
-        // B: 1
         let mut lc_b = LinearCombination::new();
         lc_b.add_term(CS_ONE, self.one());
 
-        // C: c
         let mut lc_c = LinearCombination::new();
         lc_c.add_term(c, self.one());
 
