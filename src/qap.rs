@@ -16,21 +16,39 @@ use crate::field::FieldElement;
 use crate::polynomial::Polynomial;
 use crate::r1cs::ConstraintSystem;
 
-// R1CS を QAP に変換するための構造体
+/// R1CS から変換した Quadratic Arithmetic Program (QAP)。
+///
+/// 各変数 `i` について 3 本の多項式 `(a_i(x), b_i(x), c_i(x))` を保持する。
+/// 制約 `j` 番目を `x = j` に対応させ、ラグランジュ補間で構成する。
+///
+/// 「証明者が知っている Witness `s = (s_0, s_1, ...)` で全制約が満たされる」
+/// ことは、`(Σ s_i a_i(x)) · (Σ s_i b_i(x)) − (Σ s_i c_i(x))` が
+/// 各補間点 `x = 0, 1, ..., n-1` で 0 になる、と言い換えられる。
+/// これは `Z(x) = Π (x − j)` で割り切れることと同値で、Groth16 はこの性質を
+/// ペアリングで検証する。
 #[derive(Debug, Clone)]
 pub struct Qap {
-    // 各変数ごとに 補間された多項式を持つ
-    // index 0: 定数1 の多項式
-    // index 1: 定数x の多項式...
-    pub a_polys: Vec<Polynomial>, // A行列由来のリスト（index 0 は定数1用、index 1 は変数x用...）
-    pub b_polys: Vec<Polynomial>, // B行列由来
-    pub c_polys: Vec<Polynomial>, // C行列由来
+    /// A 行列由来の多項式列。`a_polys[i]` は変数 `i` の A 列を補間したもの。
+    /// `i = 0` は定数 1（[`CS_ONE`](crate::r1cs::CS_ONE)）に対応する。
+    pub a_polys: Vec<Polynomial>,
+    /// B 行列由来の多項式列。インデックス規約は `a_polys` と同じ。
+    pub b_polys: Vec<Polynomial>,
+    /// C 行列由来の多項式列。インデックス規約は `a_polys` と同じ。
+    pub c_polys: Vec<Polynomial>,
 }
 
 impl Qap {
-    // R1CS から QAP を生成するメイン関数
+    /// 制約系から QAP を構築する。
+    ///
+    /// 各 (行列, 変数) ペアの列を「制約 index → 係数」の点列とみなし、
+    /// 補間点列 `0, 1, ..., num_constraints − 1` でラグランジュ補間する。
+    ///
+    /// 計算量は `O(num_vars · num_constraints^2)`
+    /// （変数ごとに `O(num_constraints^2)` の補間を 3 行列分）。
+    /// 制約系は `init_one` 済みであることが前提（法 `p` を取り出すため
+    /// `assignments[0]` を参照する）。
     pub fn from_r1cs(cs: &ConstraintSystem) -> Self {
-        let num_vars = cs.next_var_index; // 変数の総数（列の数）
+        let num_vars = cs.next_var_index;
         let num_constraints = cs.constraints.len();
         let p = cs
             .assignments
@@ -47,7 +65,6 @@ impl Qap {
                 .map(|i| {
                     let points = extract_column(cs, i, matrix);
                     let dense = to_dense_vector(points, num_constraints, &p);
-
                     Polynomial::lagrange_interpolation(&dense)
                 })
                 .collect()
@@ -61,8 +78,11 @@ impl Qap {
     }
 }
 
-// ヘルパー関数： extract_column で取得したスパースな点データを、
-// ラグランジュ補間に渡せるように「0埋めされた密なベクトル」に変換する
+/// スパースな点列 `[(row, value), ...]` を、長さ `num_constraints` の
+/// 密ベクトルに展開する（欠けた行は 0 で埋める）。
+///
+/// `Polynomial::lagrange_interpolation` が補間点 `x = 0, 1, ..., n-1` の
+/// `y` 値列を要求するための前処理。
 fn to_dense_vector(
     sparse_points: Vec<(usize, FieldElement)>,
     num_constraints: usize,
@@ -79,7 +99,7 @@ fn to_dense_vector(
     dense
 }
 
-// どの行列（A / B / C）の列を抜き出すかを指定するセレクタ
+/// `extract_column` が見る行列を指定するセレクタ。
 #[derive(Clone, Copy)]
 enum Matrix {
     A,
@@ -87,8 +107,10 @@ enum Matrix {
     C,
 }
 
-// 行列の「ある列（変数 index）」の係数をすべて抜き出すヘルパー関数
-// 戻り値： [(制約番号, 係数), (制約番号, 係数), ...]
+/// 指定行列の指定変数列に出てくる係数を、`(制約 index, 係数)` のスパース列で返す。
+///
+/// 同一制約内に同じ変数が複数項として登録されている場合、それぞれ別エントリで返す
+/// （`LinearCombination::add_term` がマージしない仕様に対応）。
 fn extract_column(
     cs: &ConstraintSystem,
     var_idx: usize,
@@ -97,21 +119,19 @@ fn extract_column(
     let mut points = Vec::new();
 
     for (i, constraint) in cs.constraints.iter().enumerate() {
-        // A, B, C どの行列（LinearCombination）を見るか？
         let lc = match matrix {
             Matrix::A => &constraint.a,
             Matrix::B => &constraint.b,
             Matrix::C => &constraint.c,
         };
 
-        // その制約式の中に ターゲット変数の係数はあるか？
         for (var, coeff) in &lc.terms {
             if var.0 == var_idx {
                 // (x座標: 制約式, y座標: 係数)
                 points.push((i, coeff.clone()));
             }
         }
-        // なければ 0 だが、スパース表現なのでリストに入れない（補間時に処理する）
+        // エントリなければ 0 だが、スパース表現として詰めない（to_dense_vector で 0 埋め）
     }
     points
 }
