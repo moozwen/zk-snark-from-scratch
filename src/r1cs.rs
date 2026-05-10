@@ -225,3 +225,138 @@ impl Default for ConstraintSystem {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const P: i64 = 7;
+
+    fn fe(v: i64) -> FieldElement {
+        FieldElement::new(v, P)
+    }
+
+    #[test]
+    fn alloc_variable_assigns_sequential_indices() {
+        let mut cs = ConstraintSystem::new();
+        let v0 = cs.alloc_variable();
+        let v1 = cs.alloc_variable();
+        let v2 = cs.alloc_variable();
+        assert_eq!(v0, Variable(0));
+        assert_eq!(v1, Variable(1));
+        assert_eq!(v2, Variable(2));
+        assert_eq!(cs.next_var_index, 3);
+        assert_eq!(cs.assignments.len(), 3);
+        assert!(cs.assignments.iter().all(|a| a.is_none()));
+    }
+
+    #[test]
+    fn init_one_sets_cs_one_to_one() {
+        let mut cs = ConstraintSystem::new();
+        cs.init_one(fe(1));
+        assert_eq!(cs.assignments[CS_ONE.0], Some(fe(1)));
+        assert_eq!(cs.next_var_index, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "out of bounds")]
+    fn assign_out_of_bounds_variable_panics() {
+        let mut cs = ConstraintSystem::new();
+        cs.assign(Variable(5), fe(3));
+    }
+
+    #[test]
+    fn generate_witness_returns_assigned_values() {
+        let mut cs = ConstraintSystem::new();
+        cs.init_one(fe(1));
+        let a = cs.alloc_variable();
+        let b = cs.alloc_variable();
+        cs.assign(a, fe(2));
+        cs.assign(b, fe(3));
+        assert_eq!(cs.generate_witness(), vec![fe(1), fe(2), fe(3)]);
+    }
+
+    #[test]
+    #[should_panic(expected = "unassigned")]
+    fn generate_witness_panics_on_unassigned() {
+        let mut cs = ConstraintSystem::new();
+        cs.init_one(fe(1));
+        let _ = cs.alloc_variable(); // 未 assign のまま
+        cs.generate_witness();
+    }
+
+    #[test]
+    fn mul_computes_value_and_adds_constraint() {
+        let mut cs = ConstraintSystem::new();
+        cs.init_one(fe(1));
+        let a = cs.alloc_variable();
+        let b = cs.alloc_variable();
+        cs.assign(a, fe(2));
+        cs.assign(b, fe(3));
+
+        let c = cs.mul(a, b);
+
+        // 2 * 3 ≡ 6 (mod 7)
+        assert_eq!(cs.assignments[c.0], Some(fe(6)));
+        assert_eq!(cs.constraints.len(), 1);
+
+        // 制約形: (a) * (b) = (c)
+        let con = &cs.constraints[0];
+        assert_eq!(con.a.terms, vec![(a, fe(1))]);
+        assert_eq!(con.b.terms, vec![(b, fe(1))]);
+        assert_eq!(con.c.terms, vec![(c, fe(1))]);
+    }
+
+    #[test]
+    fn add_computes_value_and_adds_constraint() {
+        let mut cs = ConstraintSystem::new();
+        cs.init_one(fe(1));
+        let a = cs.alloc_variable();
+        let b = cs.alloc_variable();
+        cs.assign(a, fe(5));
+        cs.assign(b, fe(4));
+
+        let c = cs.add(a, b);
+
+        // 5 + 4 = 9 ≡ 2 (mod 7)
+        assert_eq!(cs.assignments[c.0], Some(fe(2)));
+        assert_eq!(cs.constraints.len(), 1);
+
+        // 制約形: (a + b) * 1 = c
+        let con = &cs.constraints[0];
+        assert_eq!(con.a.terms, vec![(a, fe(1)), (b, fe(1))]);
+        assert_eq!(con.b.terms, vec![(CS_ONE, fe(1))]);
+        assert_eq!(con.c.terms, vec![(c, fe(1))]);
+    }
+
+    #[test]
+    fn add_const_computes_value_and_adds_constraint() {
+        let mut cs = ConstraintSystem::new();
+        cs.init_one(fe(1));
+        let a = cs.alloc_variable();
+        cs.assign(a, fe(3));
+
+        let c = cs.add_const(a, fe(5));
+
+        // 3 + 5 = 8 ≡ 1 (mod 7)
+        assert_eq!(cs.assignments[c.0], Some(fe(1)));
+        assert_eq!(cs.constraints.len(), 1);
+
+        // 制約形: (a + 1·k) * 1 = c
+        let con = &cs.constraints[0];
+        assert_eq!(con.a.terms, vec![(a, fe(1)), (CS_ONE, fe(5))]);
+        assert_eq!(con.b.terms, vec![(CS_ONE, fe(1))]);
+        assert_eq!(con.c.terms, vec![(c, fe(1))]);
+    }
+
+    #[test]
+    fn linear_combination_add_term_allows_duplicates() {
+        let mut lc = LinearCombination::new();
+        lc.add_term(Variable(1), fe(2));
+        lc.add_term(Variable(1), fe(3));
+        // マージせずに 2 件のまま保持される
+        assert_eq!(lc.terms.len(), 2);
+        assert_eq!(lc.terms[0], (Variable(1), fe(2)));
+        assert_eq!(lc.terms[1], (Variable(1), fe(3)));
+    }
+}
