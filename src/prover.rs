@@ -25,7 +25,7 @@ pub struct Proof {
 }
 
 /// 多項式の係数ベクトルを SRS 上で評価する
-/// f(tau) = coeffs[0]*G + coeffs[1]* tau G + coeffs[2] * tau^2 G + ...
+/// `f(tau) = coeffs[0]*G + coeffs[1]* tau G + coeffs[2] * tau^2 G + ...`
 /// つまり SRS との内積を計算する
 fn evaluate_on_g1(coeffs: &[Fr], srs_g1: &[G1Projective]) -> G1Projective {
     let mut result = G1Projective::default(); // 無限遠点（単位元）

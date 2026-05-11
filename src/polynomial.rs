@@ -4,13 +4,13 @@
 //! 証明生成における h(x) = (A·B - C)/Z(x) の計算で使われる。
 //!
 //! ## 主要型
-//! - [`Polynomial`]: [`FieldElement`](crate::field::FieldElement) を係数とする dense 表現。
+//! - [`Polynomial`]: [`FieldElement`] を係数とする dense 表現。
 //!   `Add`, `Sub`, `Mul`, `Div` を実装。
 //!
 //! ## 主要メソッド
-//! - [`Polynomial::evaluate`]: ホーナー法で多項式を評価
-//! - [`Polynomial::div_rem`]: 多項式の長除法（商と余りを返す）
-//! - [`Polynomial::lagrange_interpolation`]: x = 0, 1, 2, ... の点列からラグランジュ補間
+//! - [`Polynomial::evaluate`][]: ホーナー法で多項式を評価
+//! - [`Polynomial::div_rem`][]: 多項式の長除法（商と余りを返す）
+//! - [`Polynomial::lagrange_interpolation`][]: x = 0, 1, 2, ... の点列からラグランジュ補間
 
 use crate::field::FieldElement;
 use num_bigint::BigInt;
@@ -19,7 +19,7 @@ use std::ops::{Add, Div, Mul, Sub};
 /// 有限体係数の多項式を dense 表現で保持する。
 ///
 /// `coefficients[i]` が x^i の係数。例： `[1, 2, 3]` は `1 + 2x + 3x^2` を表す。
-/// 末尾の 0 係数は [`Polinomial::new`] で自動的に取り除かれるため、
+/// 末尾の 0 係数は [`Polynomial::new`] で自動的に取り除かれるため、
 /// 意味的な次数と `coefficients.len() - 1` は常に一致する。
 ///
 /// # 例

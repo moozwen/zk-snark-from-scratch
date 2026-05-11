@@ -1,4 +1,4 @@
-//! 自作 [`FieldElement`](crate::field::FieldElement) と arkworks の `Fr` の相互変換を提供する。
+//! 自作 [`FieldElement`] と arkworks の `Fr` の相互変換を提供する。
 //!
 //! Groth16 実装の Layer 2 と Layer 3 の境界。Layer 1〜2 は教育目的で自作した
 //! 有限体・多項式ライブラリを使い、Layer 3 のペアリング演算は arkworks の
@@ -68,7 +68,7 @@ pub fn fr_to_field_element(fr: &Fr, p: &BigInt) -> FieldElement {
     FieldElement::new(value, p.clone())
 }
 
-/// 自作 Polynomial の係数を Vec<Fr> に変換する
+/// 自作 Polynomial の係数を `Vec<Fr>` に変換する
 pub fn polynomial_to_fr_vec(poly: &Polynomial) -> Vec<Fr> {
     poly.coefficients
         .iter()
@@ -76,7 +76,7 @@ pub fn polynomial_to_fr_vec(poly: &Polynomial) -> Vec<Fr> {
         .collect()
 }
 
-/// QAP の多項式群（Vec<Polynomial>）をまとめて変換する
+/// QAP の多項式群（`Vec<Polynomial>`）をまとめて変換する
 pub fn polys_to_fr_vecs(polys: &Vec<Polynomial>) -> Vec<Vec<Fr>> {
     polys.iter().map(|p| polynomial_to_fr_vec(p)).collect()
 }
