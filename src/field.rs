@@ -137,7 +137,7 @@ impl FieldElement {
 }
 
 /// `&a + &b`: 加法。法 `p` が異なる場合は panic する。
-impl<'a, 'b> Add<&'b FieldElement> for &'a FieldElement {
+impl<'b> Add<&'b FieldElement> for &FieldElement {
     type Output = FieldElement;
 
     fn add(self, other: &'b FieldElement) -> FieldElement {
@@ -147,7 +147,7 @@ impl<'a, 'b> Add<&'b FieldElement> for &'a FieldElement {
 }
 
 /// `&a - &b`: 減法。法 `p` が異なる場合は panic する。
-impl<'a, 'b> Sub<&'b FieldElement> for &'a FieldElement {
+impl<'b> Sub<&'b FieldElement> for &FieldElement {
     type Output = FieldElement;
 
     fn sub(self, other: &'b FieldElement) -> FieldElement {
@@ -157,7 +157,7 @@ impl<'a, 'b> Sub<&'b FieldElement> for &'a FieldElement {
 }
 
 /// `&a * &b`: 乗法。法 `p` が異なる場合は panic する。
-impl<'a, 'b> Mul<&'b FieldElement> for &'a FieldElement {
+impl<'b> Mul<&'b FieldElement> for &FieldElement {
     type Output = FieldElement;
 
     fn mul(self, other: &'b FieldElement) -> FieldElement {
@@ -168,7 +168,7 @@ impl<'a, 'b> Mul<&'b FieldElement> for &'a FieldElement {
 
 /// `&a / &b`: 除法 = `&a * &b.inverse()`。
 /// 法 `p` が異なる場合 / `b == 0` の場合は panic する。
-impl<'a, 'b> Div<&'b FieldElement> for &'a FieldElement {
+impl<'b> Div<&'b FieldElement> for &FieldElement {
     type Output = FieldElement;
 
     fn div(self, other: &'b FieldElement) -> FieldElement {

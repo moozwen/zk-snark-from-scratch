@@ -212,6 +212,10 @@ impl ConstraintSystem {
     ///
     /// 新変数 `c` を確保して `c = a + b` を計算し、
     /// 制約 `(a + b) · 1 = (c)` を追加する。戻り値は `c`。
+    /// 
+    /// 現在は unit test からのみ呼ばれる。
+    /// Phase 5 以降の回路で使われ始めたら attribute を外す。
+    #[allow(dead_code)]
     pub fn add(&mut self, a: Variable, b: Variable) -> Variable {
         let c = self.alloc_variable();
 

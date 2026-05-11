@@ -186,9 +186,7 @@ impl Polynomial {
         let num_points = y_values.len();
 
         // 各点 x_i = 0, 1, 2 ... についてループする
-        for i in 0..num_points {
-            let y_i = &y_values[i];
-
+        for (i, y_i) in y_values.iter().enumerate() {
             // y_i が 0 なら計算しても結果は 0 なのでスキップ（高速化）
             // ただし厳密には基底計算が必要だが、結果に寄与しないのでOK
             if y_i.value == BigInt::from(0) {
@@ -248,7 +246,7 @@ impl Polynomial {
 }
 
 /// 多項式の加算: 同じ次数の係数同士を加算する。
-impl<'a, 'b> Add<&'b Polynomial> for &'a Polynomial {
+impl<'b> Add<&'b Polynomial> for &Polynomial {
     type Output = Polynomial;
 
     fn add(self, other: &'b Polynomial) -> Polynomial {
@@ -282,7 +280,7 @@ impl<'a, 'b> Add<&'b Polynomial> for &'a Polynomial {
 }
 
 /// 多項式の減算: 同じ次数の係数同士を減算する。
-impl<'a, 'b> Sub<&'b Polynomial> for &'a Polynomial {
+impl<'b> Sub<&'b Polynomial> for &Polynomial {
     type Output = Polynomial;
 
     fn sub(self, other: &'b Polynomial) -> Polynomial {
@@ -302,7 +300,7 @@ impl<'a, 'b> Sub<&'b Polynomial> for &'a Polynomial {
 }
 
 /// 多項式の乗算: 各係数を畳み込んで `i + j` 次の項に集約する（計算量 `O(n*m)`）。
-impl<'a, 'b> Mul<&'b Polynomial> for &'a Polynomial {
+impl<'b> Mul<&'b Polynomial> for &Polynomial {
     type Output = Polynomial;
 
     fn mul(self, other: &'b Polynomial) -> Polynomial {
@@ -322,7 +320,7 @@ impl<'a, 'b> Mul<&'b Polynomial> for &'a Polynomial {
     }
 }
 
-impl<'a, 'b> Div<&'b Polynomial> for &'a Polynomial {
+impl<'b> Div<&'b Polynomial> for &Polynomial {
     type Output = Polynomial;
 
     fn div(self, other: &'b Polynomial) -> Polynomial {

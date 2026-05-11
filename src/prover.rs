@@ -52,11 +52,11 @@ fn evaluate_on_g2(coeffs: &[Fr], srs_g2: &[G2Projective]) -> G2Projective {
 /// h_coeffs: h(x) の係数を Fr に変換したもの
 /// srs: Trusted Setup で生成した SRS
 pub fn prove_simple(
-    u_polys: &Vec<Vec<Fr>>,
-    v_polys: &Vec<Vec<Fr>>,
-    w_polys: &Vec<Vec<Fr>>,
-    witness: &Vec<Fr>,
-    h_coeffs: &Vec<Fr>,
+    u_polys: &[Vec<Fr>],
+    v_polys: &[Vec<Fr>],
+    w_polys: &[Vec<Fr>],
+    witness: &[Fr],
+    h_coeffs: &[Fr],
     srs: &Srs,
 ) -> Proof {
     // 1. 合成多項式 A(x) = Sigma a_i * u_i(x) の係数を計算する

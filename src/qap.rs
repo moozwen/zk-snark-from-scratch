@@ -201,15 +201,6 @@ mod tests {
         // 制約 0 側
         assert_eq!(qap.a_polys[1].evaluate(&p0), fe(1)); // x
         assert_eq!(qap.b_polys[1].evaluate(&p0), fe(1)); // x
-        // num_vars = CS_ONE + x + v1 + v2 = 4
-        assert_eq!(qap.a_polys.len(), 4);
-
-        let p0 = fe(0);
-        let p1 = fe(1);
-
-        // 制約 0 側
-        assert_eq!(qap.a_polys[1].evaluate(&p0), fe(1)); // x
-        assert_eq!(qap.b_polys[1].evaluate(&p0), fe(1)); // x
         assert_eq!(qap.c_polys[2].evaluate(&p0), fe(1)); // v1
 
         // 制約 1 側
