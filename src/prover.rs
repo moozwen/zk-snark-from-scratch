@@ -25,7 +25,7 @@ pub struct Proof {
 }
 
 /// 多項式の係数ベクトルを SRS 上で評価する
-/// f(tau) = coeffs[0]*G + coeffs[1]* tau G + coeffs[2] * tau^2 G + ...
+/// `f(tau) = coeffs[0]*G + coeffs[1]* tau G + coeffs[2] * tau^2 G + ...`
 /// つまり SRS との内積を計算する
 fn evaluate_on_g1(coeffs: &[Fr], srs_g1: &[G1Projective]) -> G1Projective {
     let mut result = G1Projective::default(); // 無限遠点（単位元）
@@ -52,11 +52,11 @@ fn evaluate_on_g2(coeffs: &[Fr], srs_g2: &[G2Projective]) -> G2Projective {
 /// h_coeffs: h(x) の係数を Fr に変換したもの
 /// srs: Trusted Setup で生成した SRS
 pub fn prove_simple(
-    u_polys: &Vec<Vec<Fr>>,
-    v_polys: &Vec<Vec<Fr>>,
-    w_polys: &Vec<Vec<Fr>>,
-    witness: &Vec<Fr>,
-    h_coeffs: &Vec<Fr>,
+    u_polys: &[Vec<Fr>],
+    v_polys: &[Vec<Fr>],
+    w_polys: &[Vec<Fr>],
+    witness: &[Fr],
+    h_coeffs: &[Fr],
     srs: &Srs,
 ) -> Proof {
     // 1. 合成多項式 A(x) = Sigma a_i * u_i(x) の係数を計算する
@@ -147,7 +147,7 @@ mod tests {
 
         // === 4. ウィットネスを Fr に変換 ===
         let witness_fe = cs.generate_witness();
-        let witness: Vec<Fr> = witness_fe.iter().map(|w| field_element_to_fr(w)).collect();
+        let witness: Vec<Fr> = witness_fe.iter().map(field_element_to_fr).collect();
 
         // === 5. h(x) を計算する ===
         // A(x) * B(x) - C(x) を Z(x) で割った商が h(x)

@@ -4,13 +4,13 @@
 //! 証明生成における h(x) = (A·B - C)/Z(x) の計算で使われる。
 //!
 //! ## 主要型
-//! - [`Polynomial`]: [`FieldElement`](crate::field::FieldElement) を係数とする dense 表現。
+//! - [`Polynomial`]: [`FieldElement`] を係数とする dense 表現。
 //!   `Add`, `Sub`, `Mul`, `Div` を実装。
 //!
 //! ## 主要メソッド
-//! - [`Polynomial::evaluate`]: ホーナー法で多項式を評価
-//! - [`Polynomial::div_rem`]: 多項式の長除法（商と余りを返す）
-//! - [`Polynomial::lagrange_interpolation`]: x = 0, 1, 2, ... の点列からラグランジュ補間
+//! - [`Polynomial::evaluate`][]: ホーナー法で多項式を評価
+//! - [`Polynomial::div_rem`][]: 多項式の長除法（商と余りを返す）
+//! - [`Polynomial::lagrange_interpolation`][]: x = 0, 1, 2, ... の点列からラグランジュ補間
 
 use crate::field::FieldElement;
 use num_bigint::BigInt;
@@ -19,7 +19,7 @@ use std::ops::{Add, Div, Mul, Sub};
 /// 有限体係数の多項式を dense 表現で保持する。
 ///
 /// `coefficients[i]` が x^i の係数。例： `[1, 2, 3]` は `1 + 2x + 3x^2` を表す。
-/// 末尾の 0 係数は [`Polinomial::new`] で自動的に取り除かれるため、
+/// 末尾の 0 係数は [`Polynomial::new`] で自動的に取り除かれるため、
 /// 意味的な次数と `coefficients.len() - 1` は常に一致する。
 ///
 /// # 例
@@ -114,7 +114,7 @@ impl Polynomial {
             panic!("0多項式で割ることはできません");
         }
 
-        // 被除数の次数が除数より引く場合、商は 0、余りは被除数自身
+        // 被除数の次数が除数より低い場合、商は 0、余りは被除数自身
         if self.degree() < divisor.degree() {
             return (
                 Polynomial::new(vec![FieldElement::new(BigInt::from(0), p.clone())]),
@@ -133,7 +133,7 @@ impl Polynomial {
             let deg_r = remainder.degree();
             let deg_d = divisor.degree();
 
-            // a. 最高次の項同士の割り算（有限体なので逆元をかける）
+            // a. 最高次の項同士の割り算
             let leading_r = remainder.coefficients.last().unwrap();
             let leading_d = divisor.coefficients.last().unwrap();
             let ratio = leading_r.div(leading_d); // FieldElement の割り算
@@ -186,9 +186,7 @@ impl Polynomial {
         let num_points = y_values.len();
 
         // 各点 x_i = 0, 1, 2 ... についてループする
-        for i in 0..num_points {
-            let y_i = &y_values[i];
-
+        for (i, y_i) in y_values.iter().enumerate() {
             // y_i が 0 なら計算しても結果は 0 なのでスキップ（高速化）
             // ただし厳密には基底計算が必要だが、結果に寄与しないのでOK
             if y_i.value == BigInt::from(0) {
@@ -205,9 +203,10 @@ impl Polynomial {
             let xi = FieldElement::new(BigInt::from(i), p.clone());
 
             for j in 0..num_points {
+                // 自分自身はスキップ
                 if i == j {
                     continue;
-                } // 自分自身はスキップ
+                }
 
                 let xj = FieldElement::new(BigInt::from(j), p.clone());
 
@@ -247,7 +246,7 @@ impl Polynomial {
 }
 
 /// 多項式の加算: 同じ次数の係数同士を加算する。
-impl<'a, 'b> Add<&'b Polynomial> for &'a Polynomial {
+impl<'b> Add<&'b Polynomial> for &Polynomial {
     type Output = Polynomial;
 
     fn add(self, other: &'b Polynomial) -> Polynomial {
@@ -281,7 +280,7 @@ impl<'a, 'b> Add<&'b Polynomial> for &'a Polynomial {
 }
 
 /// 多項式の減算: 同じ次数の係数同士を減算する。
-impl<'a, 'b> Sub<&'b Polynomial> for &'a Polynomial {
+impl<'b> Sub<&'b Polynomial> for &Polynomial {
     type Output = Polynomial;
 
     fn sub(self, other: &'b Polynomial) -> Polynomial {
@@ -301,7 +300,7 @@ impl<'a, 'b> Sub<&'b Polynomial> for &'a Polynomial {
 }
 
 /// 多項式の乗算: 各係数を畳み込んで `i + j` 次の項に集約する（計算量 `O(n*m)`）。
-impl<'a, 'b> Mul<&'b Polynomial> for &'a Polynomial {
+impl<'b> Mul<&'b Polynomial> for &Polynomial {
     type Output = Polynomial;
 
     fn mul(self, other: &'b Polynomial) -> Polynomial {
@@ -321,7 +320,7 @@ impl<'a, 'b> Mul<&'b Polynomial> for &'a Polynomial {
     }
 }
 
-impl<'a, 'b> Div<&'b Polynomial> for &'a Polynomial {
+impl<'b> Div<&'b Polynomial> for &Polynomial {
     type Output = Polynomial;
 
     fn div(self, other: &'b Polynomial) -> Polynomial {

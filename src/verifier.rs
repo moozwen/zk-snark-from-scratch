@@ -16,7 +16,7 @@ use ark_ec::{pairing::Pairing, CurveGroup, PrimeGroup};
 use crate::prover::Proof;
 
 /// シンプル版の検証
-/// [A]_1 * [B]_2 == [C]_1 * G_2 をペアリングで確認する
+/// `[A]_1 * [B]_2 == [C]_1 * G_2` をペアリングで確認する
 pub fn verify_simple(proof: &Proof) -> bool {
     let g2 = G2Projective::generator();
 
