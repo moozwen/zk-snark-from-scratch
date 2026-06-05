@@ -6,13 +6,10 @@
 //!
 //! ## 主要関数
 //! - [`field_element_to_fr`]: 自作 → arkworks
-//! - [`fr_to_field_element`]: arkworks → 自作
 //! - [`polynomial_to_fr_vec`] / [`polys_to_fr_vecs`]: 多項式の係数ベクトルをまとめて変換
 
 use ark_bn254::Fr;
 use ark_ff::{BigInteger256, PrimeField};
-use num_bigint::BigInt;
-use num_bigint::Sign;
 
 use crate::field::FieldElement;
 use crate::polynomial::Polynomial;
@@ -50,34 +47,9 @@ pub fn field_element_to_fr(fe: &FieldElement) -> Fr {
     Fr::from_bigint(big_int).expect("Fr の範囲外の値です")
 }
 
-/// ark_bn254::Fr -> 自作 FieldElement に変換する
-/// 
-/// 現在は test 経由でのみ使用。
-/// Phase 5 で proof 値を自作型に戻す必要が出たら attribute を外す。
-#[allow(dead_code)]
-pub fn fr_to_field_element(fr: &Fr, p: &BigInt) -> FieldElement {
-    // 1. Fr から BigInteger256 を取り出す
-    let big_int: BigInteger256 = fr.into_bigint();
-
-    // 2. [u64; 4] からバイト列に変換する
-    let limbs = big_int.0;
-    let mut bytes = Vec::with_capacity(32);
-    for limb in &limbs {
-        bytes.extend_from_slice(&limb.to_le_bytes());
-    }
-
-    // 3. バイト列から num_bigint::BigInt を作る
-    let value = BigInt::from_bytes_le(Sign::Plus, &bytes);
-
-    FieldElement::new(value, p.clone())
-}
-
 /// 自作 Polynomial の係数を `Vec<Fr>` に変換する
 pub fn polynomial_to_fr_vec(poly: &Polynomial) -> Vec<Fr> {
-    poly.coefficients
-        .iter()
-        .map(field_element_to_fr)
-        .collect()
+    poly.coefficients.iter().map(field_element_to_fr).collect()
 }
 
 /// QAP の多項式群（`Vec<Polynomial>`）をまとめて変換する
@@ -88,9 +60,10 @@ pub fn polys_to_fr_vecs(polys: &[Polynomial]) -> Vec<Vec<Fr>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use num_bigint::BigInt;
 
     #[test]
-    fn test_small_value_roundtrip() {
+    fn test_small_value() {
         // BN254 の曲線位数（Fr の法）
         let p = BigInt::parse_bytes(
             b"21888242871839275222246405745257275088548364400416034343698204186575808495617",
@@ -105,10 +78,6 @@ mod tests {
         // arkworks 側で同じ値を使って比較
         let fr_expected = Fr::from(42u64);
         assert_eq!(fr, fr_expected);
-
-        // 逆変換して元に戻ることを確認
-        let fe_back = fr_to_field_element(&fr, &p);
-        assert_eq!(fe_back.value, BigInt::from(42));
     }
 
     #[test]
@@ -137,8 +106,7 @@ mod tests {
         let fe = FieldElement::new(val, p.clone());
         let fr = field_element_to_fr(&fe);
 
-        // 逆変換して一致するか
-        let fe_back = fr_to_field_element(&fr, &p);
-        assert_eq!(fe.value, fe_back.value);
+        // p-1 は Fr 上の ‐1 に対応する（変換が panic せず正しいことを確認）
+        assert_eq!(fr, -Fr::from(1u64));
     }
 }
