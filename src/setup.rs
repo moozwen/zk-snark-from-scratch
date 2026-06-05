@@ -51,11 +51,10 @@ pub fn generate_srs(tau: Fr, num_constraints: usize) -> Srs {
     // 3. G2 用 SRS: [G2, tau G2, tau^2 G2, ...]
     let g2_points: Vec<G2Projective> = tau_powers.iter().map(|tp| g2 * tp).collect();
 
-    // 4. ターゲット多項式 t(tau) = (tau-1)(tau-2)...(tau-n) を計算
+    // 4. ターゲット多項式 t(tau) = (tau-1)(tau-2)...(tau-(n-1)) を計算
+    // QAP の補間点 0, 1, ..., n-1 に対応する
     // セットアップは tau を知っているのでスカラーとして直接計算できる
     let mut t_tau = Fr::from(1u64);
-    // 修正前: for i in 1..=n
-    // 修正後: 自作 QAP の補間点 0, 1, 2, ..., n-1 に合わせる
     for i in 0..n {
         t_tau *= tau - Fr::from(i as u64);
     }
