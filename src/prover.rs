@@ -51,6 +51,11 @@ fn evaluate_on_g2(coeffs: &[Fr], srs_g2: &[G2Projective]) -> G2Projective {
 /// witness: ウィットネス [1, x, v1, v2, y, ...] を Fr に変換したもの
 /// h_coeffs: h(x) の係数を Fr に変換したもの
 /// srs: Trusted Setup で生成した SRS
+///
+/// 各 `*_polys[i]` は QAP の Lagrange 補間結果で、末尾のゼロが除去されるため
+/// 長さは `0..=num_constraints` の範囲でばらつく（ある行列に登場しない変数は
+/// ゼロ多項式 = 長さ 1）。合成係数 `a/b/c_coeffs` は長さ `num_constraints` で確保し
+/// 各多項式は存在する係数だけ加算する（補間の次数は高々 `num_constraints - 1`）。
 pub fn prove_simple(
     u_polys: &[Vec<Fr>],
     v_polys: &[Vec<Fr>],
@@ -61,24 +66,21 @@ pub fn prove_simple(
 ) -> Proof {
     // 1. 合成多項式 A(x) = Sigma a_i * u_i(x) の係数を計算する
     // 各 u_i(x) の係数に witness[i] を掛けて足し合わせる
-    let num_constraints = u_polys[0].len(); // 多項式の係数の数
+    let num_constraints = u_polys[0].len(); // 補間点数 = R1CS 制約数（u_polys[0] = CS_ONE 列は全制約に出るので最長）
     let mut a_coeffs = vec![Fr::from(0u64); num_constraints];
     let mut b_coeffs = vec![Fr::from(0u64); num_constraints];
     let mut c_coeffs = vec![Fr::from(0u64); num_constraints];
 
     for (i, w_val) in witness.iter().enumerate() {
-        for j in 0..num_constraints {
-            // u_polys[i] が i番目の変数の多項式の係数
-            // 係数が足りない場合は 0 として扱う
-            if j < u_polys[i].len() {
-                a_coeffs[j] += u_polys[i][j] * w_val;
-            }
-            if j < v_polys[i].len() {
-                b_coeffs[j] += v_polys[i][j] * w_val;
-            }
-            if j < w_polys[i].len() {
-                c_coeffs[j] += w_polys[i][j] * w_val;
-            }
+        // 各多項式は存在する係数だけ加算する（短い列も index out of bounds にならない）
+        for (j, coeff) in u_polys[i].iter().enumerate() {
+            a_coeffs[j] += *coeff * w_val;
+        }
+        for (j, coeff) in v_polys[i].iter().enumerate() {
+            b_coeffs[j] += *coeff * w_val;
+        }
+        for (j, coeff) in w_polys[i].iter().enumerate() {
+            c_coeffs[j] += *coeff * w_val;
         }
     }
 
