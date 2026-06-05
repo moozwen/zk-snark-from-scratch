@@ -44,7 +44,7 @@ pub fn field_element_to_fr(fe: &FieldElement) -> Fr {
 
     // 3. BigInteger256 を作って Fr に変換する
     let big_int = BigInteger256::new(limbs);
-    Fr::from_bigint(big_int).expect("Fr の範囲外の値です")
+    Fr::from_bigint(big_int).expect("FieldElement value exceeds Fr modulus")
 }
 
 /// 自作 Polynomial の係数を `Vec<Fr>` に変換する
