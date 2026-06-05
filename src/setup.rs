@@ -27,7 +27,13 @@ pub struct Srs {
 ///
 /// tau: 秘密のスカラー。セレモニー後に破棄する
 /// num_constraints: R1CS の制約数＝QAPの補間点の数
+///
+/// # Panics
+///
+/// `num_constraints == 0` のとき panic する。R1CS から QAP を作る上で
+/// 制約 0 件は意味を持たないため、最低 1 件を要求する。
 pub fn generate_srs(tau: Fr, num_constraints: usize) -> Srs {
+    assert!(num_constraints >= 1, "SRS requires at least one constraint");
     let g1 = G1Projective::generator(); // G1 を取得する
     let g2 = G2Projective::generator(); // G2 を取得する
     let n = num_constraints;
