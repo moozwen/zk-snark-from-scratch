@@ -62,6 +62,15 @@ mod tests {
     use super::*;
     use num_bigint::BigInt;
 
+    /// BN254 の曲線位数（Fr の法）を返すテスト用ヘルパ。
+    fn bn254_modulus() -> BigInt {
+        BigInt::parse_bytes(
+            b"21888242871839275222246405745257275088548364400416034343698204186575808495617",
+            10,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn test_small_value() {
         // BN254 の曲線位数（Fr の法）
@@ -108,5 +117,57 @@ mod tests {
 
         // p-1 は Fr 上の ‐1 に対応する（変換が panic せず正しいことを確認）
         assert_eq!(fr, -Fr::from(1u64));
+    }
+
+    #[test]
+    fn test_polynomial_to_fr_vec() {
+        let p = bn254_modulus();
+
+        // 1  2x  3x^2 の係数ベクトル
+        let poly = Polynomial::new(vec![
+            FieldElement::new(1, p.clone()),
+            FieldElement::new(2, p.clone()),
+            FieldElement::new(3, p.clone()),
+        ]);
+
+        let frs = polynomial_to_fr_vec(&poly);
+
+        assert_eq!(frs, vec![Fr::from(1u64), Fr::from(2u64), Fr::from(3u64)]);
+    }
+
+    #[test]
+    fn test_polynomial_to_fr_vec_zero() {
+        let p = bn254_modulus();
+
+        // ゼロ多項式（Polynomial::new は単一ゼロ係数を保持する）
+        let poly = Polynomial::new(vec![FieldElement::new(0, p.clone())]);
+
+        let frs = polynomial_to_fr_vec(&poly);
+
+        assert_eq!(frs, vec![Fr::from(0u64)]);
+    }
+
+    #[test]
+    fn test_polys_to_fr_vecs_matches_individual() {
+        let p = bn254_modulus();
+
+        // 2 本の多項式: 1  2x と 5  7x  11x^2
+        let poly0 = Polynomial::new(vec![
+            FieldElement::new(1, p.clone()),
+            FieldElement::new(2, p.clone()),
+        ]);
+        let poly1 = Polynomial::new(vec![
+            FieldElement::new(5, p.clone()),
+            FieldElement::new(7, p.clone()),
+            FieldElement::new(11, p.clone()),
+        ]);
+
+        let polys = vec![poly0.clone(), poly1.clone()];
+        let batch = polys_to_fr_vecs(&polys);
+
+        // 一括変換が個別変換の結果と一致すること
+        assert_eq!(batch.len(), 2);
+        assert_eq!(batch[0], polynomial_to_fr_vec(&poly0));
+        assert_eq!(batch[1], polynomial_to_fr_vec(&poly1));
     }
 }
