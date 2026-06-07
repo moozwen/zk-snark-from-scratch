@@ -34,3 +34,47 @@ pub fn verify_simple(proof: &Proof) -> bool {
 
     lhs == rhs
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ark_bn254::{Fr, G1Projective};
+
+    /// スカラー a, b, c から proof (a·G1, b·G2, c·G1) を組むヘルパ。
+    ///
+    /// 検証等式 `e(A, B) = e(C, G2)` は双線形性より `e(G1, G2)^{a·b} = e(G1, G2)^c`、
+    /// つまり `a·b == c (mod r)` のとき成立する。QAP 全パイプラインを通さずに
+    /// 検証ロジック単体を確認できる。
+    fn make_proof(a: u64, b: u64, c: u64) -> Proof {
+        let g1 = G1Projective::generator();
+        let g2 = G2Projective::generator();
+        Proof {
+            a_g1: g1 * Fr::from(a),
+            b_g2: g2 * Fr::from(b),
+            c_g1: g1 * Fr::from(c),
+        }
+    }
+
+    #[test]
+    fn test_verify_accepts_valid_proof() {
+        // a·b = 3·5 = 15 = c → accept
+        let proof = make_proof(3, 5, 15);
+        assert!(verify_simple(&proof));
+    }
+
+    #[test]
+    fn test_verify_rejects_shifted_a() {
+        // A を G1 generator 分ずらす（実質 a: 3 → 4）。4·5 = 20 ≠ 15 → reject
+        let mut proof = make_proof(3, 5, 15);
+        proof.a_g1 += G1Projective::generator();
+        assert!(!verify_simple(&proof));
+    }
+
+    #[test]
+    fn test_verify_rejects_doubled_c() {
+        // C を 2 倍にする（実質 c: 15 → 30）。3·5 = 15 ≠ 30 → reject
+        let mut proof = make_proof(3, 5, 15);
+        proof.c_g1 = proof.c_g1 + proof.c_g1;
+        assert!(!verify_simple(&proof));
+    }
+}
