@@ -101,6 +101,7 @@ pub fn prove_simple(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ark_ec::PrimeGroup; // generator() のため
     use crate::adapter::{field_element_to_fr, polynomial_to_fr_vec, polys_to_fr_vecs};
     use crate::field::FieldElement;
     use crate::polynomial::Polynomial;
@@ -208,5 +209,43 @@ mod tests {
 
         // === 8. 検証 ===
         assert!(verify_simple(&proof), "検証に失敗しました");
+    }
+
+    #[test]
+    fn test_evaluate_on_g1_linear() {
+        // 係数 [1, 2] を SRS [G, τG] で評価 → (1 + 2τ)·G = G + 2·(τG)
+        let g1 = G1Projective::generator();
+        let tau = Fr::from(5u64);
+        let srs_g1 = vec![g1, g1 * tau];
+        let coeffs = vec![Fr::from(1u64), Fr::from(2u64)];
+
+        let result = evaluate_on_g1(&coeffs, &srs_g1);
+        let expected = g1 + (g1 * tau) * Fr::from(2u64);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_evaluate_on_g1_all_zero() {
+        // 係数がすべて 0 → 無限遠点（単位元）
+        let g1 = G1Projective::generator();
+        let tau = Fr::from(5u64);
+        let srs_g1 = vec![g1, g1 * tau, g1 * tau * tau];
+        let coeffs = vec![Fr::from(0u64); 3];
+
+        let result = evaluate_on_g1(&coeffs, &srs_g1);
+        assert_eq!(result, G1Projective::default());
+    }
+
+    #[test]
+    fn test_evaluate_on_g2_linear() {
+        // G2 側も同じ内積規則: 係数 [1, 2] を SRS [G2, τG2] で評価 → (1 + 2τ)·G2
+        let g2 = G2Projective::generator();
+        let tau = Fr::from(5u64);
+        let srs_g2 = vec![g2, g2 * tau];
+        let coeffs = vec![Fr::from(1u64), Fr::from(2u64)];
+
+        let result = evaluate_on_g2(&coeffs, &srs_g2);
+        let expected = g2 + (g2 * tau) * Fr::from(2u64);
+        assert_eq!(result, expected);
     }
 }
