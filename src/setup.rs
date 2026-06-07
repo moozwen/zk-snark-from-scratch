@@ -81,6 +81,7 @@ pub fn generate_srs(tau: Fr, num_constraints: usize) -> Srs {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ark_ff::Field; // tau.pow() のため
 
     #[test]
     fn test_srs_lengths() {
@@ -114,5 +115,62 @@ mod tests {
         // 2番目の点は tau^1 * G1
         let expected = G1Projective::generator() * tau;
         assert_eq!(srs.g1_points[1], expected);
+    }
+
+    #[test]
+    fn test_srs_g1_all_powers() {
+        // 全 i について g1_points[i] == tau^i * G1 を確認する
+        let tau = Fr::from(7u64);
+        let n = 3;
+        let srs = generate_srs(tau, n);
+
+        // 2n-1 = 5 点すべて
+        assert_eq!(srs.g1_points.len(), 5);
+        let g1 = G1Projective::generator();
+        for (i, point) in srs.g1_points.iter().enumerate() {
+            let expected = g1 * tau.pow([i as u64]);
+            assert_eq!(*point, expected, "g1_points[{i}] が tau^{i}*G1 と不一致");
+        }
+    }
+
+    #[test]
+    fn test_srs_g2_power() {
+        // G2 側も同じ規則 g2_points[i] == tau^i * G2 に従う（i=2 で代表確認）
+        let tau = Fr::from(7u64);
+        let srs = generate_srs(tau, 3);
+
+        let expected = G2Projective::generator() * tau.pow([2u64]);
+        assert_eq!(srs.g2_points[2], expected);
+    }
+
+    #[test]
+    fn test_srs_ht_first_is_t_tau() {
+        // n=3 のとき t(tau) = (tau-0)(tau-1)(tau-2)
+        // ht_points[0] = tau^0 * t(tau) * G1 = t(tau) * G1
+        let tau = Fr::from(7u64);
+        let srs = generate_srs(tau, 3);
+
+        let t_tau = (tau - Fr::from(0u64)) * (tau - Fr::from(1u64)) * (tau - Fr::from(2u64));
+        let expected = G1Projective::generator() * t_tau;
+        assert_eq!(srs.ht_points[0], expected);
+    }
+
+    #[test]
+    fn test_srs_n_equals_one() {
+        // n=1 の境界: 2n-1=1 点、ht は n-1=0 点で空
+        let tau = Fr::from(7u64);
+        let srs = generate_srs(tau, 1);
+
+        assert_eq!(srs.g1_points.len(), 1);
+        assert_eq!(srs.g2_points.len(), 1);
+        assert!(srs.ht_points.is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "SRS requires at least one constraint")]
+    fn test_srs_n_equals_zero_panics() {
+        // n=0 は precondition 違反（コミット4 で追加した assert）
+        let tau = Fr::from(7u64);
+        let _ = generate_srs(tau, 0);
     }
 }
