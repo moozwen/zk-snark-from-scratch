@@ -6,18 +6,21 @@
 //!
 //! ## 主要関数
 //! - [`field_element_to_fr`]: 自作 → arkworks
-//! - [`fr_to_field_element`]: arkworks → 自作
 //! - [`polynomial_to_fr_vec`] / [`polys_to_fr_vecs`]: 多項式の係数ベクトルをまとめて変換
 
 use ark_bn254::Fr;
 use ark_ff::{BigInteger256, PrimeField};
-use num_bigint::BigInt;
-use num_bigint::Sign;
 
 use crate::field::FieldElement;
 use crate::polynomial::Polynomial;
 
-/// FieldElement -> ark_bn254::Fr に変換する
+/// 自作 [`FieldElement`] を arkworks の `Fr` に変換する。
+///
+/// 変換は次の段を踏む:
+/// `BigInt` → リトルエンディアンのバイト列 → `[u64; 4]`（limb）→
+/// `BigInteger256` → `Fr`。`Fr` の法（BN254 のスカラー体位数）を超える値は
+/// `from_bigint` が `None` を返すため panic する。境界は片方向で、proof は
+/// G1/G2 点・ペアリング結果は `GT` なので `Fr` への逆変換は不要。
 pub fn field_element_to_fr(fe: &FieldElement) -> Fr {
     // 1. BigInt から リトルエンディアン のバイト列を取得
     // to_bytes_le() は (Sing, Vec<u8>) を返す
@@ -47,40 +50,22 @@ pub fn field_element_to_fr(fe: &FieldElement) -> Fr {
 
     // 3. BigInteger256 を作って Fr に変換する
     let big_int = BigInteger256::new(limbs);
-    Fr::from_bigint(big_int).expect("Fr の範囲外の値です")
+    Fr::from_bigint(big_int).expect("FieldElement value exceeds Fr modulus")
 }
 
-/// ark_bn254::Fr -> 自作 FieldElement に変換する
-/// 
-/// 現在は test 経由でのみ使用。
-/// Phase 5 で proof 値を自作型に戻す必要が出たら attribute を外す。
-#[allow(dead_code)]
-pub fn fr_to_field_element(fr: &Fr, p: &BigInt) -> FieldElement {
-    // 1. Fr から BigInteger256 を取り出す
-    let big_int: BigInteger256 = fr.into_bigint();
-
-    // 2. [u64; 4] からバイト列に変換する
-    let limbs = big_int.0;
-    let mut bytes = Vec::with_capacity(32);
-    for limb in &limbs {
-        bytes.extend_from_slice(&limb.to_le_bytes());
-    }
-
-    // 3. バイト列から num_bigint::BigInt を作る
-    let value = BigInt::from_bytes_le(Sign::Plus, &bytes);
-
-    FieldElement::new(value, p.clone())
-}
-
-/// 自作 Polynomial の係数を `Vec<Fr>` に変換する
+/// 自作 [`Polynomial`] の係数を `Vec<Fr>` に変換する。
+///
+/// QAP の多項式を SRS 上で評価（prover の内積計算）するための前処理。
+/// 各係数を [`field_element_to_fr`] で変換し、`coefficients[i]` の並び
+/// （`x^i` の係数）をそのまま保つ。
 pub fn polynomial_to_fr_vec(poly: &Polynomial) -> Vec<Fr> {
-    poly.coefficients
-        .iter()
-        .map(field_element_to_fr)
-        .collect()
+    poly.coefficients.iter().map(field_element_to_fr).collect()
 }
 
-/// QAP の多項式群（`Vec<Polynomial>`）をまとめて変換する
+/// QAP の多項式群（`a_polys` / `b_polys` / `c_polys` など）をまとめて変換する。
+///
+/// 各 [`Polynomial`] に [`polynomial_to_fr_vec`] を適用するだけ。prover が
+/// witness で重み付けする前の、変数ごとの係数ベクトル列を得るのに使う。
 pub fn polys_to_fr_vecs(polys: &[Polynomial]) -> Vec<Vec<Fr>> {
     polys.iter().map(polynomial_to_fr_vec).collect()
 }
@@ -88,9 +73,19 @@ pub fn polys_to_fr_vecs(polys: &[Polynomial]) -> Vec<Vec<Fr>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use num_bigint::BigInt;
+
+    /// BN254 の曲線位数（Fr の法）を返すテスト用ヘルパ。
+    fn bn254_modulus() -> BigInt {
+        BigInt::parse_bytes(
+            b"21888242871839275222246405745257275088548364400416034343698204186575808495617",
+            10,
+        )
+        .unwrap()
+    }
 
     #[test]
-    fn test_small_value_roundtrip() {
+    fn test_small_value() {
         // BN254 の曲線位数（Fr の法）
         let p = BigInt::parse_bytes(
             b"21888242871839275222246405745257275088548364400416034343698204186575808495617",
@@ -105,10 +100,6 @@ mod tests {
         // arkworks 側で同じ値を使って比較
         let fr_expected = Fr::from(42u64);
         assert_eq!(fr, fr_expected);
-
-        // 逆変換して元に戻ることを確認
-        let fe_back = fr_to_field_element(&fr, &p);
-        assert_eq!(fe_back.value, BigInt::from(42));
     }
 
     #[test]
@@ -137,8 +128,59 @@ mod tests {
         let fe = FieldElement::new(val, p.clone());
         let fr = field_element_to_fr(&fe);
 
-        // 逆変換して一致するか
-        let fe_back = fr_to_field_element(&fr, &p);
-        assert_eq!(fe.value, fe_back.value);
+        // p-1 は Fr 上の ‐1 に対応する（変換が panic せず正しいことを確認）
+        assert_eq!(fr, -Fr::from(1u64));
+    }
+
+    #[test]
+    fn test_polynomial_to_fr_vec() {
+        let p = bn254_modulus();
+
+        // 1  2x  3x^2 の係数ベクトル
+        let poly = Polynomial::new(vec![
+            FieldElement::new(1, p.clone()),
+            FieldElement::new(2, p.clone()),
+            FieldElement::new(3, p.clone()),
+        ]);
+
+        let frs = polynomial_to_fr_vec(&poly);
+
+        assert_eq!(frs, vec![Fr::from(1u64), Fr::from(2u64), Fr::from(3u64)]);
+    }
+
+    #[test]
+    fn test_polynomial_to_fr_vec_zero() {
+        let p = bn254_modulus();
+
+        // ゼロ多項式（Polynomial::new は単一ゼロ係数を保持する）
+        let poly = Polynomial::new(vec![FieldElement::new(0, p.clone())]);
+
+        let frs = polynomial_to_fr_vec(&poly);
+
+        assert_eq!(frs, vec![Fr::from(0u64)]);
+    }
+
+    #[test]
+    fn test_polys_to_fr_vecs_matches_individual() {
+        let p = bn254_modulus();
+
+        // 2 本の多項式: 1  2x と 5  7x  11x^2
+        let poly0 = Polynomial::new(vec![
+            FieldElement::new(1, p.clone()),
+            FieldElement::new(2, p.clone()),
+        ]);
+        let poly1 = Polynomial::new(vec![
+            FieldElement::new(5, p.clone()),
+            FieldElement::new(7, p.clone()),
+            FieldElement::new(11, p.clone()),
+        ]);
+
+        let polys = vec![poly0.clone(), poly1.clone()];
+        let batch = polys_to_fr_vecs(&polys);
+
+        // 一括変換が個別変換の結果と一致すること
+        assert_eq!(batch.len(), 2);
+        assert_eq!(batch[0], polynomial_to_fr_vec(&poly0));
+        assert_eq!(batch[1], polynomial_to_fr_vec(&poly1));
     }
 }

@@ -17,16 +17,29 @@ use ark_bn254::{Fr, G1Projective, G2Projective};
 
 use crate::setup::Srs;
 
-/// シンプル版の証明（楕円曲線上の3点）
+/// simple 版の証明（楕円曲線上の3点）。
+///
+/// 各点は QAP 多項式を秘密の τ で評価した値を曲線上に焼き込んだもの:
+/// `a_g1 = A(τ)·G1`、`b_g2 = B(τ)·G2`、`c_g1 = (W(τ) + h(τ)·t(τ))·G1`。
+/// verifier はこの3点だけでペアリング等式を確認する。
+#[derive(Debug)]
 pub struct Proof {
-    pub a_g1: G1Projective, // [A]_1
-    pub b_g2: G2Projective, // [B]_2
-    pub c_g1: G1Projective, // [C]_1
+    /// `[A]_1 = A(τ)·G1`。witness で重み付けした `u_i` の合成多項式の評価。
+    pub a_g1: G1Projective,
+    /// `[B]_2 = B(τ)·G2`。同じく `v_i` の合成多項式の評価（G2 上）。
+    pub b_g2: G2Projective,
+    /// `[C]_1 = (W(τ) + h(τ)·t(τ))·G1`。`w_i` の合成に h·t の項を足したもの。
+    pub c_g1: G1Projective,
 }
 
-/// 多項式の係数ベクトルを SRS 上で評価する
-/// `f(tau) = coeffs[0]*G + coeffs[1]* tau G + coeffs[2] * tau^2 G + ...`
-/// つまり SRS との内積を計算する
+/// 多項式の係数ベクトルを SRS 上で評価し、`f(τ)·G` を点として得る。
+///
+/// `f(τ)·G = coeffs[0]·G + coeffs[1]·(τ·G) + coeffs[2]·(τ²·G) + ...`
+/// すなわち係数ベクトルと SRS 点列の内積。SRS には τ の冪が点として
+/// 入っているので、τ 自体を知らなくても `f(τ)·G` を計算できる。
+///
+/// `evaluate_on_g2` は G2 版で中身は同形。教育コードとして G1/G2 を
+/// 並べて読めるよう、あえてジェネリック化せずコピーで残している。
 fn evaluate_on_g1(coeffs: &[Fr], srs_g1: &[G1Projective]) -> G1Projective {
     let mut result = G1Projective::default(); // 無限遠点（単位元）
     for (i, coeff) in coeffs.iter().enumerate() {
@@ -35,6 +48,8 @@ fn evaluate_on_g1(coeffs: &[Fr], srs_g1: &[G1Projective]) -> G1Projective {
     result
 }
 
+/// [`evaluate_on_g1`] の G2 版。係数ベクトルと SRS（G2 点列）の内積で
+/// `f(τ)·G2` を計算する。
 fn evaluate_on_g2(coeffs: &[Fr], srs_g2: &[G2Projective]) -> G2Projective {
     let mut result = G2Projective::default();
     for (i, coeff) in coeffs.iter().enumerate() {
@@ -43,14 +58,27 @@ fn evaluate_on_g2(coeffs: &[Fr], srs_g2: &[G2Projective]) -> G2Projective {
     result
 }
 
-/// シンプル版の証明を生成する（alpha, beta なし）
+/// simple 版の証明を生成する（α, β なし、zero-knowledge 化なし）。
 ///
-/// u_polys: 各変数の u_i(x) の係数（L行列由来）
-/// v_polys: 各変数の v_i(x) の係数（R行列由来）
-/// w_polys: 各変数の w_i(x) の係数（O行列由来）
-/// witness: ウィットネス [1, x, v1, v2, y, ...] を Fr に変換したもの
-/// h_coeffs: h(x) の係数を Fr に変換したもの
-/// srs: Trusted Setup で生成した SRS
+/// `u_polys`: 各変数の `u_i(x)` の係数（A 行列由来）
+/// `v_polys`: 各変数の `v_i(x)` の係数（B 行列由来）
+/// `w_polys`: 各変数の `w_i(x)` の係数（C 行列由来）
+/// `witness`: ウィットネス `[1, x, v1, v2, y, ...]` を `Fr` に変換したもの
+/// `h_coeffs`: `h(x)` の係数を `Fr` に変換したもの
+/// `srs`: trusted setup で生成した [`Srs`]
+///
+/// witness で各変数の多項式を重み付け合成して `A(x)/B(x)/W(x)` を作り、
+/// [`evaluate_on_g1`] / [`evaluate_on_g2`] で SRS 上の点に評価する。
+/// `[C]_1` には h·t の項を足す。計算量は O(num_vars · num_constraints)。
+///
+/// 各 `*_polys[i]` は QAP の Lagrange 補間結果で、末尾のゼロが除去されるため
+/// 長さは `0..=num_constraints` の範囲でばらつく（ある行列に登場しない変数は
+/// ゼロ多項式 = 長さ 1）。合成係数 `a/b/c_coeffs` は長さ `num_constraints` で確保し
+/// 各多項式は存在する係数だけ加算する（補間の次数は高々 `num_constraints - 1`）。
+///
+/// 補間点数 = 多項式の係数の数 = R1CS 制約数 の3つが一致する設計で、
+/// `num_constraints` は `u_polys[0]`（CS_ONE 列、全制約に現れるため最長）の
+/// 長さから取っている。
 pub fn prove_simple(
     u_polys: &[Vec<Fr>],
     v_polys: &[Vec<Fr>],
@@ -61,24 +89,21 @@ pub fn prove_simple(
 ) -> Proof {
     // 1. 合成多項式 A(x) = Sigma a_i * u_i(x) の係数を計算する
     // 各 u_i(x) の係数に witness[i] を掛けて足し合わせる
-    let num_constraints = u_polys[0].len(); // 多項式の係数の数
+    let num_constraints = u_polys[0].len(); // 補間点数 = R1CS 制約数（u_polys[0] = CS_ONE 列は全制約に出るので最長）
     let mut a_coeffs = vec![Fr::from(0u64); num_constraints];
     let mut b_coeffs = vec![Fr::from(0u64); num_constraints];
     let mut c_coeffs = vec![Fr::from(0u64); num_constraints];
 
     for (i, w_val) in witness.iter().enumerate() {
-        for j in 0..num_constraints {
-            // u_polys[i] が i番目の変数の多項式の係数
-            // 係数が足りない場合は 0 として扱う
-            if j < u_polys[i].len() {
-                a_coeffs[j] += u_polys[i][j] * w_val;
-            }
-            if j < v_polys[i].len() {
-                b_coeffs[j] += v_polys[i][j] * w_val;
-            }
-            if j < w_polys[i].len() {
-                c_coeffs[j] += w_polys[i][j] * w_val;
-            }
+        // 各多項式は存在する係数だけ加算する（短い列も index out of bounds にならない）
+        for (j, coeff) in u_polys[i].iter().enumerate() {
+            a_coeffs[j] += *coeff * w_val;
+        }
+        for (j, coeff) in v_polys[i].iter().enumerate() {
+            b_coeffs[j] += *coeff * w_val;
+        }
+        for (j, coeff) in w_polys[i].iter().enumerate() {
+            c_coeffs[j] += *coeff * w_val;
         }
     }
 
@@ -99,6 +124,7 @@ pub fn prove_simple(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ark_ec::PrimeGroup; // generator() のため
     use crate::adapter::{field_element_to_fr, polynomial_to_fr_vec, polys_to_fr_vecs};
     use crate::field::FieldElement;
     use crate::polynomial::Polynomial;
@@ -206,5 +232,43 @@ mod tests {
 
         // === 8. 検証 ===
         assert!(verify_simple(&proof), "検証に失敗しました");
+    }
+
+    #[test]
+    fn test_evaluate_on_g1_linear() {
+        // 係数 [1, 2] を SRS [G, τG] で評価 → (1 + 2τ)·G = G + 2·(τG)
+        let g1 = G1Projective::generator();
+        let tau = Fr::from(5u64);
+        let srs_g1 = vec![g1, g1 * tau];
+        let coeffs = vec![Fr::from(1u64), Fr::from(2u64)];
+
+        let result = evaluate_on_g1(&coeffs, &srs_g1);
+        let expected = g1 + (g1 * tau) * Fr::from(2u64);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_evaluate_on_g1_all_zero() {
+        // 係数がすべて 0 → 無限遠点（単位元）
+        let g1 = G1Projective::generator();
+        let tau = Fr::from(5u64);
+        let srs_g1 = vec![g1, g1 * tau, g1 * tau * tau];
+        let coeffs = vec![Fr::from(0u64); 3];
+
+        let result = evaluate_on_g1(&coeffs, &srs_g1);
+        assert_eq!(result, G1Projective::default());
+    }
+
+    #[test]
+    fn test_evaluate_on_g2_linear() {
+        // G2 側も同じ内積規則: 係数 [1, 2] を SRS [G2, τG2] で評価 → (1 + 2τ)·G2
+        let g2 = G2Projective::generator();
+        let tau = Fr::from(5u64);
+        let srs_g2 = vec![g2, g2 * tau];
+        let coeffs = vec![Fr::from(1u64), Fr::from(2u64)];
+
+        let result = evaluate_on_g2(&coeffs, &srs_g2);
+        let expected = g2 + (g2 * tau) * Fr::from(2u64);
+        assert_eq!(result, expected);
     }
 }
