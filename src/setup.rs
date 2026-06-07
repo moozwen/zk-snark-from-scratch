@@ -16,22 +16,38 @@
 use ark_bn254::{Fr, G1Projective, G2Projective};
 use ark_ec::PrimeGroup;
 
-/// 構造化文字列（Structured Reference String）
+/// 構造化文字列（Structured Reference String）。
+///
+/// simple QAP 版の SRS。秘密のスカラー τ の冪を楕円曲線点に焼き込んだ
+/// 「多項式を τ で評価するためのデータベース」。prover は多項式の係数と
+/// この点列の内積で `f(τ)·G` を τ を知らずに計算できる。
 pub struct Srs {
-    pub g1_points: Vec<G1Projective>, // [G1, tau G1, tau^2 G1, ...]
-    pub g2_points: Vec<G2Projective>, // [G2, tau G2, tau^2 G2, ...]
-    pub ht_points: Vec<G1Projective>, // [t(tau)G1, tau t(tau)G1, ...]
+    /// `[G1, τ·G1, τ²·G1, ..., τ^(2n-2)·G1]`。長さ `2n-1`。
+    /// `A(x)·B(x)` が次数 `2n-2` まで届くため `2n-1` 個の冪が要る。
+    pub g1_points: Vec<G1Projective>,
+    /// `[G2, τ·G2, ..., τ^(2n-2)·G2]`。長さ `2n-1`。B(x) を G2 上で評価する用。
+    pub g2_points: Vec<G2Projective>,
+    /// `[t(τ)·G1, τ·t(τ)·G1, ..., τ^(n-2)·t(τ)·G1]`。長さ `n-1`。
+    /// h(x)（次数高々 `n-2`）に `t(τ)` を掛けた項を評価する用。
+    pub ht_points: Vec<G1Projective>,
 }
 
-/// SRS を生成する
+/// SRS を生成する trusted setup。
 ///
-/// tau: 秘密のスカラー。セレモニー後に破棄する
-/// num_constraints: R1CS の制約数＝QAPの補間点の数
+/// `tau`: 秘密のスカラー。本来は setup ceremony で生成し、SRS を作ったら破棄する
+/// （現状はデモのため [`main`](crate) で固定値を渡している）。`tau` が漏れると
+/// 偽の証明を作れてしまう。
+///
+/// `num_constraints`: R1CS の制約数 `n` ＝ QAP の補間点の数。SRS 長さは
+/// `g1_points`/`g2_points` が `2n-1`、`ht_points` が `n-1` になる。
+///
+/// 計算量は O(n) のスカラー倍が支配的。
 ///
 /// # Panics
 ///
-/// `num_constraints == 0` のとき panic する。R1CS から QAP を作る上で
-/// 制約 0 件は意味を持たないため、最低 1 件を要求する。
+/// `num_constraints == 0`（precondition `>= 1` 違反）のとき panic する。
+/// R1CS から QAP を作る上で制約 0 件は意味を持たず、`2n-1` が usize の
+/// underflow を起こすため、明示的に弾く。
 pub fn generate_srs(tau: Fr, num_constraints: usize) -> Srs {
     assert!(num_constraints >= 1, "SRS requires at least one constraint");
     let g1 = G1Projective::generator(); // G1 を取得する

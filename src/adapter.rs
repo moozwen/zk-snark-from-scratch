@@ -14,7 +14,13 @@ use ark_ff::{BigInteger256, PrimeField};
 use crate::field::FieldElement;
 use crate::polynomial::Polynomial;
 
-/// FieldElement -> ark_bn254::Fr に変換する
+/// 自作 [`FieldElement`] を arkworks の `Fr` に変換する。
+///
+/// 変換は次の段を踏む:
+/// `BigInt` → リトルエンディアンのバイト列 → `[u64; 4]`（limb）→
+/// `BigInteger256` → `Fr`。`Fr` の法（BN254 のスカラー体位数）を超える値は
+/// `from_bigint` が `None` を返すため panic する。境界は片方向で、proof は
+/// G1/G2 点・ペアリング結果は `GT` なので `Fr` への逆変換は不要。
 pub fn field_element_to_fr(fe: &FieldElement) -> Fr {
     // 1. BigInt から リトルエンディアン のバイト列を取得
     // to_bytes_le() は (Sing, Vec<u8>) を返す
@@ -47,12 +53,19 @@ pub fn field_element_to_fr(fe: &FieldElement) -> Fr {
     Fr::from_bigint(big_int).expect("FieldElement value exceeds Fr modulus")
 }
 
-/// 自作 Polynomial の係数を `Vec<Fr>` に変換する
+/// 自作 [`Polynomial`] の係数を `Vec<Fr>` に変換する。
+///
+/// QAP の多項式を SRS 上で評価（prover の内積計算）するための前処理。
+/// 各係数を [`field_element_to_fr`] で変換し、`coefficients[i]` の並び
+/// （`x^i` の係数）をそのまま保つ。
 pub fn polynomial_to_fr_vec(poly: &Polynomial) -> Vec<Fr> {
     poly.coefficients.iter().map(field_element_to_fr).collect()
 }
 
-/// QAP の多項式群（`Vec<Polynomial>`）をまとめて変換する
+/// QAP の多項式群（`a_polys` / `b_polys` / `c_polys` など）をまとめて変換する。
+///
+/// 各 [`Polynomial`] に [`polynomial_to_fr_vec`] を適用するだけ。prover が
+/// witness で重み付けする前の、変数ごとの係数ベクトル列を得るのに使う。
 pub fn polys_to_fr_vecs(polys: &[Polynomial]) -> Vec<Vec<Fr>> {
     polys.iter().map(polynomial_to_fr_vec).collect()
 }

@@ -6,17 +6,27 @@
 //! ## 主要関数
 //! - [`verify_simple`]: simple QAP 版の検証 `e(A, B) = e(C, G2)`
 //!
+//! ペアリング `e: G1 × G2 → GT` の双線形性 `e(aP, bQ) = e(P, Q)^{ab}` を使う。
+//! 指数の上で `A(τ)·B(τ)` と `C(τ)·1` を比較することで、QAP の関係
+//! `A(τ)·B(τ) = W(τ) + h(τ)·t(τ)` を点のまま（τ を知らずに）確認できる。
+//!
 //! ## 注意
-//! 現状は **simple 版** の検証等式。v0.6 で Groth16 本式
-//! `e(A, B) = e(α, β) · e(Σ aᵢ, γ) · e(C, δ)` に置き換え予定。
+//! 現状は **simple 版** の検証等式。zero-knowledge 性はなく、α/β/γ/δ も無い。
+//! v0.6 で Groth16 本式 `e(A, B) = e(α, β) · e(Σ aᵢ, γ) · e(C, δ)` に置き換え予定。
 
 use ark_bn254::{Bn254, G2Projective};
 use ark_ec::{pairing::Pairing, CurveGroup, PrimeGroup};
 
 use crate::prover::Proof;
 
-/// シンプル版の検証
-/// `[A]_1 * [B]_2 == [C]_1 * G_2` をペアリングで確認する
+/// simple 版の検証。`e([A]_1, [B]_2) == e([C]_1, G2)` をペアリングで確認する。
+///
+/// 双線形性より左辺は `e(G1, G2)^{A(τ)·B(τ)}`、右辺は `e(G1, G2)^{C(τ)}`。
+/// 両者が一致するのは指数 `A(τ)·B(τ) = C(τ)`、すなわち QAP が満たされるとき。
+/// `C(τ) = W(τ) + h(τ)·t(τ)` なので、これは `A·B - W = h·t` の点上での確認に当たる。
+///
+/// arkworks のペアリング API が `G1Affine` / `G2Affine` を要求するため、
+/// proof の射影座標を [`CurveGroup::into_affine`] で変換してから渡す。
 pub fn verify_simple(proof: &Proof) -> bool {
     let g2 = G2Projective::generator();
 
