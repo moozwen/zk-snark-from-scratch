@@ -78,6 +78,15 @@ pub struct Constraint {
 /// `mul` / `add` / `add_const` を使う前に [`init_one`](Self::init_one) を呼んで
 /// [`CS_ONE`] を初期化する必要がある（内部で係数 1 を作るときに参照するため）。
 ///
+/// ## 変数レイアウト
+///
+/// 変数は常に `[CS_ONE, 公開入力, ..., 中間/秘密変数, ...]` の順に並ぶ。
+/// 先頭 `num_public_variables` 個（[`CS_ONE`] を含む）が public で、
+/// この境界 l+1 が Groth16 の検証等式で公開入力 `a_0, ..., a_l` を切り出すのに使われる。
+/// 公開入力は [`alloc_public_input`](Self::alloc_public_input) で、秘密/中間変数は
+/// [`alloc_variable`](Self::alloc_variable) で発行する。
+/// ｐublic は private より前に確保しなければならない（前方に固める Groth16 の慣習に従う）。
+///
 /// # 例
 ///
 /// ```text
@@ -92,6 +101,9 @@ pub struct ConstraintSystem {
     pub constraints: Vec<Constraint>,
     // 各変数の値を保持するリスト
     pub assignments: Vec<Option<FieldElement>>,
+    // 先頭から数えた public 変数の数（CS_ONE 含む = l+1）。
+    // 不変条件: public 変数は常にインデックス 0..num_public_variables
+    pub num_public_variables: usize,
 }
 
 impl ConstraintSystem {
@@ -105,6 +117,8 @@ impl ConstraintSystem {
             constraints: Vec::new(),
             // alloc 時に None を埋める方針
             assignments: Vec::new(),
+            // init_one で CS_ONE を public として 1 に設定する
+            num_public_variables: 0,
         }
     }
 
@@ -130,6 +144,8 @@ impl ConstraintSystem {
             self.alloc_variable(); // Index 0 を確保
         }
         self.assign(CS_ONE, one);
+        // CS_ONE (a_0 = 1) は常に public。これが public 領域の起点になる。
+        self.num_public_variables = 1;
     }
 
     /// 全変数の現在値を Witness ベクトルとして取り出す。
@@ -153,6 +169,31 @@ impl ConstraintSystem {
         let var = Variable(self.next_var_index);
         self.next_var_index += 1;
         self.assignments.push(None);
+        var
+    }
+
+    /// 公開入力変数を 1 つ発行し、その [`Variable`] ハンドルを返す。
+    ///
+    /// 公開変数はインデックス前方（[`CS_ONE`] の直後）に固める必要があるため、
+    /// [`alloc_variable`](Self::alloc_variable) で秘密/中間変数を 1 つでも確保した後に
+    /// 呼ぶと panic する。
+    /// [`init_one`](Self::init_one) 済みであることも前提とする。
+    ///
+    /// 値は未代入（`None`）状態で確保される。`assign` で値を入れる必要がある。
+    pub fn alloc_public_input(&mut self) -> Variable {
+        assert!(
+            self.num_public_variables >= 1,
+            "call init_one() before alloc_public_input()"
+        );
+        // public 領域は 0..num_public_variables。
+        // private を alloc 済みだと next_var_index がこれを追い越すので、前方固めが崩れる。
+        assert_eq!(
+            self.next_var_index, self.num_public_variables,
+            "alloc_public_input() must be called before any private alloc_variable()"
+        );
+
+        let var = self.alloc_variable();
+        self.num_public_variables += 1;
         var
     }
 
@@ -212,7 +253,7 @@ impl ConstraintSystem {
     ///
     /// 新変数 `c` を確保して `c = a + b` を計算し、
     /// 制約 `(a + b) · 1 = (c)` を追加する。戻り値は `c`。
-    /// 
+    ///
     /// 現在は unit test からのみ呼ばれる。
     /// Phase 5 以降の回路で使われ始めたら attribute を外す。
     #[allow(dead_code)]
