@@ -454,4 +454,55 @@ mod tests {
         assert_eq!(lc.terms[0], (Variable(1), fe(2)));
         assert_eq!(lc.terms[1], (Variable(1), fe(3)));
     }
+
+    #[test]
+    fn alloc_public_input_increments_public_count() {
+        let mut cs = ConstraintSystem::new();
+        cs.init_one(fe(1));
+        
+        // init_one 時点では CS_ONE のみが public
+        assert_eq!(cs.num_public_variables, 1);
+
+        let p0 = cs.alloc_public_input();
+        let p1 = cs.alloc_public_input();
+
+        // CS_ONE の直後（index 1, 2）に公開入力が固めて配置されること
+        assert_eq!(p0, Variable(1));
+        assert_eq!(p1, Variable(2));
+        assert_eq!(cs.num_public_variables, 3); // CS_ONE + 2
+
+        // 以降の秘密/中間変数は public 領域を侵さない
+        let _priv = cs.alloc_variable();
+        assert_eq!(cs.num_public_variables, 3);
+        assert_eq!(cs.next_var_index, 4);
+    }
+
+    #[test]
+    fn circuit_without_public_inputs_has_one_public_var() {
+        // public を一切使わない回路では CS_ONE だけが public (l = 0)
+        let mut cs = ConstraintSystem::new();
+        cs.init_one(fe(1));
+        let a = cs.alloc_variable();
+        let b = cs.alloc_variable();
+        cs.assign(a, fe(2));
+        cs.assign(b, fe(3));
+        let _c = cs.mul(a, b);
+        assert_eq!(cs.num_public_variables, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "before any private")]
+    fn alloc_public_iput_after_private_panics() {
+        let mut cs = ConstraintSystem::new();
+        cs.init_one(fe(1));
+        let _priv = cs.alloc_variable();
+        cs.alloc_public_input();
+    }
+
+    #[test]
+    #[should_panic(expected = "init_one")]
+    fn alloc_public_input_before_init_one_panics() {
+        let mut cs = ConstraintSystem::new();
+        cs.alloc_public_input();
+    }
 }
