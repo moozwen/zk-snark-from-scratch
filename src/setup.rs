@@ -5,7 +5,7 @@
 //!
 //! ## 主要型
 //! - [`Srs`]: simple 版の G1 / G2 / ht 点ベクトル
-//! - [`ToxicWate`]: 本式 Groth16 の秘密値 α, β, γ, δ, τ
+//! - [`ToxicWaste`]: 本式 Groth16 の秘密値 α, β, γ, δ, τ
 //! - [`QapFr`]: Fr 変換済みの QAP 多項式（setup/prover が τ 評価に使う）
 //! - [`ProvingKey`] / [`VerifyingKey`]: 本式 Groth16 の 2 本立て鍵
 //!
@@ -269,6 +269,8 @@ pub fn generate_groth16_keys(
 
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use super::*;
     use ark_ff::Field; // tau.pow() のため
 
@@ -361,5 +363,123 @@ mod tests {
         // n=0 は precondition 違反（コミット4 で追加した assert）
         let tau = Fr::from(7u64);
         let _ = generate_srs(tau, 0);
+    }
+
+    fn sample_toxic() -> ToxicWaste {
+        ToxicWaste {
+            alpha: Fr::from(2u64),
+            beta: Fr::from(3u64),
+            gamma: Fr::from(5u64),
+            delta: Fr::from(7u64),
+            tau: Fr::from(11u64),
+        }
+    }
+
+    /// m=3 変数・n=2 制約を想定した手組みQAP（構造確認用）
+    /// wire0 = CS_ONE, wire1 = public 入力, wire2 = private
+    fn sample_qap_fr() -> QapFr {
+        QapFr {
+            a_polys: vec![
+                vec![Fr::from(1u64)],                 // wire0: u_0 = 1 -> u_0(tau) = 1
+                vec![Fr::from(0u64), Fr::from(1u64)], // wire1: u_1 = 0 + x -> u_1(tau) = tau
+                vec![Fr::from(2u64)],                 // wire2: u_2 = 2 -> u_2(tau) = 2
+            ],
+            b_polys: vec![
+                vec![Fr::from(0u64)], // wire0: v_0 = 0
+                vec![Fr::from(1u64)], // wire1: v_1 = 1
+                vec![Fr::from(3u64)], // wire2: v_2 = 3
+            ],
+            c_polys: vec![
+                vec![Fr::from(0u64)],                 // wire0: w_0 = 0
+                vec![Fr::from(4u64)],                 // wire1: w_1 = 4
+                vec![Fr::from(1u64), Fr::from(1u64)], // wire2: w_2 = 1 + x -> w_2(tau) = 1 + tau
+            ],
+        }
+    }
+
+    #[test]
+    fn groth16_keys_have_expected_lengths() {
+        let toxic = sample_toxic();
+        let qap = sample_qap_fr();
+        let n = 2;
+        let num_public = 2; // CS_ONE + public 入力 1 つ（l = 1）
+        let (pk, vk) = generate_groth16_keys(&qap, n, num_public, &toxic);
+
+        let m = qap.a_polys.len(); // 3
+        assert_eq!(vk.ic.len(), num_public); // l+1 = 2
+        assert_eq!(pk.private_query.len(), m - num_public); // m-l-1 = 1
+
+        assert_eq!(pk.h_query.len(), n - 1); // 1
+        assert_eq!(pk.tau_g1.len(), n); // 2
+        assert_eq!(pk.tau_g2.len(), n); // 2
+    }
+
+    #[test]
+    fn groth16_keys_match_toxic_scalars() {
+        let toxic = sample_toxic();
+        let qap = sample_qap_fr();
+        let (pk, vk) = generate_groth16_keys(&qap, 2, 2, &toxic);
+
+        let g1 = G1Projective::generator();
+        let g2 = G2Projective::generator();
+
+        // toxic スカラーと点の対応を抜き取り確認
+        assert_eq!(pk.alpha_g1, g1 * toxic.alpha);
+        assert_eq!(vk.alpha_g1, g1 * toxic.alpha);
+        assert_eq!(pk.beta_g2, g2 * toxic.beta);
+        assert_eq!(vk.beta_g2, g2 * toxic.beta);
+        assert_eq!(vk.gamma_g2, g2 * toxic.gamma);
+        assert_eq!(vk.delta_g2, g2 * toxic.delta);
+        // τ 冪列: index 1 は τ·G
+        assert_eq!(pk.tau_g1[1], g1 * toxic.tau);
+        assert_eq!(pk.tau_g2[1], g2 * toxic.tau);
+    }
+
+    #[test]
+    fn ic_zero_matches_manual_combo() {
+        let toxic = sample_toxic();
+        let qap = sample_qap_fr();
+        let (_pk, vk) = generate_groth16_keys(&qap, 2, 2, &toxic);
+
+        // wire0: u_0(τ)=1, v_0(τ)=0, w_0(τ)=0
+        // combo_0 = β·1 + α·0 + 0 = β、IC_0 = (combo_0/γ)·G1
+        let combo0 = toxic.beta * Fr::from(1u64) + toxic.alpha * Fr::from(0u64) + Fr::from(0u64);
+        let gamma_inv = toxic.gamma.inverse().unwrap();
+        let expected = G1Projective::generator() * (combo0 * gamma_inv);
+        assert_eq!(vk.ic[0], expected);
+    }
+
+    #[test]
+    fn private_query_matches_manual_combo() {
+        let toxic = sample_toxic();
+        let qap = sample_qap_fr();
+        let (pk, _vk) = generate_groth16_keys(&qap, 2, 2, &toxic);
+
+        // wire2 (private): u=2, v=3, w=1+τ=12 → combo = β·2 + α·3 + 12 = 24
+        // private_query[0] = (combo/δ)·G1
+        let combo2 = toxic.beta * Fr::from(2u64)
+            + toxic.alpha * Fr::from(3u64)
+            + (Fr::from(1u64) + toxic.tau);
+        let delta_inv = toxic.delta.inverse().unwrap();
+        let expected = G1Projective::generator() * (combo2 * delta_inv);
+        assert_eq!(pk.private_query[0], expected);
+    }
+
+    #[test]
+    #[should_panic(expected = "delta must be nonzero")]
+    fn groth16_keys_delta_zero_panics() {
+        let mut toxic = sample_toxic();
+        toxic.delta = Fr::from(0u64);
+        let qap = sample_qap_fr();
+        let _ = generate_groth16_keys(&qap, 2, 2, &toxic);
+    }
+
+    #[test]
+    #[should_panic(expected = "gamma must be nonzero")]
+    fn groth16_keys_gamma_zero_panics() {
+        let mut toxic = sample_toxic();
+        toxic.gamma = Fr::from(0u64);
+        let qap = sample_qap_fr();
+        let _ = generate_groth16_keys(&qap, 2, 2, &toxic);
     }
 }
