@@ -105,6 +105,7 @@ pub fn generate_srs(tau: Fr, num_constraints: usize) -> Srs {
 /// いずれか 1 つでも漏れると、偽の証明を作れてしまう。
 /// `gamma` / `delta` は逆元を取るため 0 であってはならない。
 /// （本番では MPC ceremony で生成するが、本実装では単一生成 & 破棄前提とする。
+#[allow(dead_code)] // Phase 6b で本式 prover/verifier・main に配線したら外す
 pub struct ToxicWaste {
     pub alpha: Fr,
     pub beta: Fr,
@@ -119,6 +120,7 @@ pub struct ToxicWaste {
 /// 昇順系数列（`x^j` の係数が index `j`）。
 /// [`adapter::polys_to_fr_vecs`] の出力を 3 本まとめて持つ。
 /// setup と 本式 prover の双方が τ の評価入力に使う。
+#[allow(dead_code)] // Phase 6b で配線するまで
 pub struct QapFr {
     pub a_polys: Vec<Vec<Fr>>,
     pub b_polys: Vec<Vec<Fr>>,
@@ -126,6 +128,7 @@ pub struct QapFr {
 }
 
 /// 本式 Groth16 の proving key。prover が証明 `(A, B, C)` を作るのに必要な点群。
+#[allow(dead_code)] // Phase 6b の prover で全フィールドを使う
 pub struct ProvingKey {
     /// `[α]_1`
     pub alpha_g1: G1Projective,
@@ -149,6 +152,7 @@ pub struct ProvingKey {
 }
 
 /// 本式 Groth16 の verifying key。verifier がペアリング等式を確認するのに必要な点群。
+#[allow(dead_code)] // Phase 6b の verifier で使う
 pub struct VerifyingKey {
     /// `[α]_1`
     pub alpha_g1: G1Projective,
@@ -166,6 +170,7 @@ pub struct VerifyingKey {
 /// 昇順係数の多項式を τ で評価する（Horner 法）。
 ///
 /// `coeffs[j]` が `x^j` の係数。空ベクトルは 0 を返す。
+#[allow(dead_code)] // generate_groth16_keys が未配線のため
 fn eval_poly(coeffs: &[Fr], tau: Fr) -> Fr {
     let mut acc = Fr::from(0u64);
     for c in coeffs.iter().rev() {
@@ -188,6 +193,7 @@ fn eval_poly(coeffs: &[Fr], tau: Fr) -> Fr {
 /// # Panics
 /// `num_constraints == 0`、`γ == 0`、`δ == 0`（いずれも逆元 / QAP が成立しない）
 /// のとき panic する。
+#[allow(dead_code)] // Phase 6b で main に配線したら外す
 pub fn generate_groth16_keys(
     qap_fr: &QapFr,
     num_constraints: usize,
