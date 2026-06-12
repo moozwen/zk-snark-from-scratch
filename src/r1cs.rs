@@ -78,6 +78,15 @@ pub struct Constraint {
 /// `mul` / `add` / `add_const` を使う前に [`init_one`](Self::init_one) を呼んで
 /// [`CS_ONE`] を初期化する必要がある（内部で係数 1 を作るときに参照するため）。
 ///
+/// ## 変数レイアウト
+///
+/// 変数は常に `[CS_ONE, 公開入力, ..., 中間/秘密変数, ...]` の順に並ぶ。
+/// 先頭 `num_public_variables` 個（[`CS_ONE`] を含む）が public で、
+/// この境界 l+1 が Groth16 の検証等式で公開入力 `a_0, ..., a_l` を切り出すのに使われる。
+/// 公開入力は [`alloc_public_input`](Self::alloc_public_input) で、秘密/中間変数は
+/// [`alloc_variable`](Self::alloc_variable) で発行する。
+/// ｐublic は private より前に確保しなければならない（前方に固める Groth16 の慣習に従う）。
+///
 /// # 例
 ///
 /// ```text
@@ -92,6 +101,9 @@ pub struct ConstraintSystem {
     pub constraints: Vec<Constraint>,
     // 各変数の値を保持するリスト
     pub assignments: Vec<Option<FieldElement>>,
+    // 先頭から数えた public 変数の数（CS_ONE 含む = l+1）。
+    // 不変条件: public 変数は常にインデックス 0..num_public_variables
+    pub num_public_variables: usize,
 }
 
 impl ConstraintSystem {
@@ -105,6 +117,8 @@ impl ConstraintSystem {
             constraints: Vec::new(),
             // alloc 時に None を埋める方針
             assignments: Vec::new(),
+            // init_one で CS_ONE を public として 1 に設定する
+            num_public_variables: 0,
         }
     }
 
@@ -130,6 +144,8 @@ impl ConstraintSystem {
             self.alloc_variable(); // Index 0 を確保
         }
         self.assign(CS_ONE, one);
+        // CS_ONE (a_0 = 1) は常に public。これが public 領域の起点になる。
+        self.num_public_variables = 1;
     }
 
     /// 全変数の現在値を Witness ベクトルとして取り出す。
@@ -153,6 +169,32 @@ impl ConstraintSystem {
         let var = Variable(self.next_var_index);
         self.next_var_index += 1;
         self.assignments.push(None);
+        var
+    }
+
+    /// 公開入力変数を 1 つ発行し、その [`Variable`] ハンドルを返す。
+    ///
+    /// 公開変数はインデックス前方（[`CS_ONE`] の直後）に固める必要があるため、
+    /// [`alloc_variable`](Self::alloc_variable) で秘密/中間変数を 1 つでも確保した後に
+    /// 呼ぶと panic する。
+    /// [`init_one`](Self::init_one) 済みであることも前提とする。
+    ///
+    /// 値は未代入（`None`）状態で確保される。`assign` で値を入れる必要がある。
+    #[allow(dead_code)] // Phase 6b で公開入力回路 / mainに配線したら外す
+    pub fn alloc_public_input(&mut self) -> Variable {
+        assert!(
+            self.num_public_variables >= 1,
+            "call init_one() before alloc_public_input()"
+        );
+        // public 領域は 0..num_public_variables。
+        // private を alloc 済みだと next_var_index がこれを追い越すので、前方固めが崩れる。
+        assert_eq!(
+            self.next_var_index, self.num_public_variables,
+            "alloc_public_input() must be called before any private alloc_variable()"
+        );
+
+        let var = self.alloc_variable();
+        self.num_public_variables += 1;
         var
     }
 
@@ -212,7 +254,7 @@ impl ConstraintSystem {
     ///
     /// 新変数 `c` を確保して `c = a + b` を計算し、
     /// 制約 `(a + b) · 1 = (c)` を追加する。戻り値は `c`。
-    /// 
+    ///
     /// 現在は unit test からのみ呼ばれる。
     /// Phase 5 以降の回路で使われ始めたら attribute を外す。
     #[allow(dead_code)]
@@ -412,5 +454,56 @@ mod tests {
         assert_eq!(lc.terms.len(), 2);
         assert_eq!(lc.terms[0], (Variable(1), fe(2)));
         assert_eq!(lc.terms[1], (Variable(1), fe(3)));
+    }
+
+    #[test]
+    fn alloc_public_input_increments_public_count() {
+        let mut cs = ConstraintSystem::new();
+        cs.init_one(fe(1));
+
+        // init_one 時点では CS_ONE のみが public
+        assert_eq!(cs.num_public_variables, 1);
+
+        let p0 = cs.alloc_public_input();
+        let p1 = cs.alloc_public_input();
+
+        // CS_ONE の直後（index 1, 2）に公開入力が固めて配置されること
+        assert_eq!(p0, Variable(1));
+        assert_eq!(p1, Variable(2));
+        assert_eq!(cs.num_public_variables, 3); // CS_ONE + 2
+
+        // 以降の秘密/中間変数は public 領域を侵さない
+        let _priv = cs.alloc_variable();
+        assert_eq!(cs.num_public_variables, 3);
+        assert_eq!(cs.next_var_index, 4);
+    }
+
+    #[test]
+    fn circuit_without_public_inputs_has_one_public_var() {
+        // public を一切使わない回路では CS_ONE だけが public (l = 0)
+        let mut cs = ConstraintSystem::new();
+        cs.init_one(fe(1));
+        let a = cs.alloc_variable();
+        let b = cs.alloc_variable();
+        cs.assign(a, fe(2));
+        cs.assign(b, fe(3));
+        let _c = cs.mul(a, b);
+        assert_eq!(cs.num_public_variables, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "before any private")]
+    fn alloc_public_iput_after_private_panics() {
+        let mut cs = ConstraintSystem::new();
+        cs.init_one(fe(1));
+        let _priv = cs.alloc_variable();
+        cs.alloc_public_input();
+    }
+
+    #[test]
+    #[should_panic(expected = "init_one")]
+    fn alloc_public_input_before_init_one_panics() {
+        let mut cs = ConstraintSystem::new();
+        cs.alloc_public_input();
     }
 }
