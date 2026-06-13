@@ -4,18 +4,20 @@
 //! SRS 上で評価し、楕円曲線点として証明を構築する。
 //!
 //! ## 主要型
-//! - [`Proof`]: `(A ∈ G1, B ∈ G2, C ∈ G1)` の三点組
+//! - [`Proof`]: simple 版の `(A ∈ G1, B ∈ G2, C ∈ G1)` 三点組
+//! - [`Groth16Proof`]: 本式の `(A, B, C)` （ランダム化込み）
 //!
 //! ## 主要関数
 //! - [`prove_simple`]: simple QAP 版の証明生成
+//! - [`prove`]: 本式 Groth16 の証明生成（ランダム r, s 込み）
 //!
 //! ## 注意
-//! 現状は **simple 版** （α, β, γ, δ なし、zero-knowledge 化なし）。
-//! v0.5 で Groth16 本式の Prover（ランダム化 r, s 含む）に置き換え予定。
+//! simple 版（[`prove_simple`]）と本式（[`prove`]）が併存している。
+//! 本式が E2E で通った後、simple 版は Phase 6b で削除予定。
 
 use ark_bn254::{Fr, G1Projective, G2Projective};
 
-use crate::setup::Srs;
+use crate::setup::{ProvingKey, QapFr, Srs};
 
 /// simple 版の証明（楕円曲線上の3点）。
 ///
@@ -30,6 +32,22 @@ pub struct Proof {
     pub b_g2: G2Projective,
     /// `[C]_1 = (W(τ) + h(τ)·t(τ))·G1`。`w_i` の合成に h·t の項を足したもの。
     pub c_g1: G1Projective,
+}
+
+/// 本式 Groth16 の証明（楕円曲線上の 3 点）。
+///
+/// simple 版 [`Proof`] と点の構成は同じ `(A, B, C)` だが、各点に α/β/γ/δ と
+/// ランダム値 r, s が織り込まれており、検証は 4 ペアリングの等式で行う。
+/// r, s により同じ witness でも proof が毎回変わる（zero-knowledge）。
+#[derive(Debug)]
+#[allow(dead_code)] // Phase 6b の verifier / main 配線（B4）で使う。それまで dead_code を許可
+pub struct Groth16Proof {
+    /// `[A]_1 = [ α + Σ_i a_i·u_i(τ) + r·δ ]_1`
+    pub a: G1Projective,
+    /// `[B]_2 = [ β + Σ_i a_i·v_i(τ) + s·δ ]_2`
+    pub b: G2Projective,
+    /// `[C]_1`。private wire 合成 + h·t/δ に `s·A + r·B_1 − r·s·δ` を足したもの。
+    pub c: G1Projective,
 }
 
 /// 多項式の係数ベクトルを SRS 上で評価し、`f(τ)·G` を点として得る。
@@ -121,10 +139,69 @@ pub fn prove_simple(
     Proof { a_g1, b_g2, c_g1 }
 }
 
+/// 本式 Groth16 の証明を生成する（ランダム化 r, s 込み）。
+///
+/// `pk`: trusted setup で生成した [`ProvingKey`]
+/// `qap_fr`: Fr 変換済みの QAP（変数ごとの `u_i / v_i / w_i` 係数）
+/// `witness`: `[1, 公開入力..., 秘密/中間...]` を `Fr` 変換したもの
+/// `h_coeffs`: `h(x) = (A·B − C)/Z` の係数を `Fr` 変換したもの
+/// `r`, `s`: zero-knowledge 用のランダム値（テスト再現性のため引数で受ける）
+///
+///
+/// public/private の境界 ℓ+1 は `witness.len() − pk.private_query.len()` から導く。
+/// A, B(G2), B_1(G1) を組み、C は「private wire 合成 + h·t/δ」に
+/// `s·A + r·B_1 − r·s·δ` を足して構成する。計算量は O(num_vars · num_constraints)。
+#[allow(dead_code)] // B4 で main に配線したら外す
+pub fn prove(
+    pk: &ProvingKey,
+    qap_fr: &QapFr,
+    witness: &[Fr],
+    h_coeffs: &[Fr],
+    r: Fr,
+    s: Fr,
+) -> Groth16Proof {
+    // 1. 全 wire の合成多項式 A(x)=Σ a_i u_i(x), B(x)=Σ a_i v_i(x) の係数を計算する。
+    //    補間次数は高々 n-1 なので係数列の長さは n（= pk.tau_g1.len()）で確保する。
+    let n = pk.tau_g1.len();
+    let mut a_coeffs = vec![Fr::from(0u64); n];
+    let mut b_coeffs = vec![Fr::from(0u64); n];
+    for (i, w_val) in witness.iter().enumerate() {
+        for (j, coeff) in qap_fr.a_polys[i].iter().enumerate() {
+            a_coeffs[j] += *coeff * w_val;
+        }
+        for (j, coeff) in qap_fr.b_polys[i].iter().enumerate() {
+            b_coeffs[j] += *coeff * w_val;
+        }
+    }
+
+    // 2. τ 冪 SRS 上で評価。B は C 計算用に G1 でも作る（B_1）。
+    let sum_a_g1 = evaluate_on_g1(&a_coeffs, &pk.tau_g1); // Σ a_i u_i(τ)·G1
+    let sum_b_g2 = evaluate_on_g2(&b_coeffs, &pk.tau_g2); // Σ a_i v_i(τ)·G1
+    let sum_b_g1 = evaluate_on_g1(&b_coeffs, &pk.tau_g1); // Σ a_i v_i(τ)·G1
+
+    // 3. A = α + Σ a_i u_i(τ) + r·δ、B = β + Σ a_i v_i(τ) + s·δ、B_1 は B の G1 版。
+    let a = pk.alpha_g1 + sum_a_g1 + pk.delta_g1 * r;
+    let b = pk.beta_g2 + sum_b_g2 + pk.delta_g2 * s;
+    let b1 = pk.delta_g1 + sum_b_g1 + pk.delta_g1 * s;
+
+    // 4. C の /δ 項: private wire 合成 Σ_{i>ℓ} a_i·[(βu+αv+w)/δ]_1 + h(τ)t(τ)/δ。
+    //    private_query[j] は wire i = num_public + j に対応する。
+    let num_public = witness.len() - pk.private_query.len();
+    let mut c_div_delta = G1Projective::default();
+    for (j, point) in pk.private_query.iter().enumerate() {
+        c_div_delta += *point * witness[num_public + j];
+    }
+    c_div_delta += evaluate_on_g1(h_coeffs, &pk.h_query); // h(τ)t(τ)/δ
+
+    // 5. C = (上記)/δ + s·A + r·B_1 − r·s·δ。
+    let c = c_div_delta + a * s + b1 * r - pk.delta_g1 * (r * s);
+
+    Groth16Proof { a, b, c }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ark_ec::PrimeGroup; // generator() のため
     use crate::adapter::{field_element_to_fr, polynomial_to_fr_vec, polys_to_fr_vecs};
     use crate::field::FieldElement;
     use crate::polynomial::Polynomial;
@@ -132,6 +209,7 @@ mod tests {
     use crate::r1cs::ConstraintSystem;
     use crate::setup::generate_srs;
     use crate::verifier::verify_simple;
+    use ark_ec::PrimeGroup; // generator() のため
     use num_bigint::BigInt;
 
     /// x^3 + 5 の回路を作って、QAP -> SRS -> Prove -> Verify を通す
