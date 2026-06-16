@@ -60,12 +60,14 @@ fn evaluate_on_g2(coeffs: &[Fr], srs_g2: &[G2Projective]) -> G2Projective {
 /// `qap_fr`: Fr 変換済みの QAP（変数ごとの `u_i / v_i / w_i` 係数）
 /// `witness`: `[1, 公開入力..., 秘密/中間...]` を `Fr` 変換したもの
 /// `h_coeffs`: `h(x) = (A·B − C)/Z` の係数を `Fr` 変換したもの
-/// `r`, `s`: zero-knowledge 用のランダム値（テスト再現性のため引数で受ける）
-///
+/// `r`, `s`: zero-knowledge 用のランダム値（毎回ランダムに引くことで同じ witness でも
+///   proof が変わる。テスト再現性のため引数で受ける）
 ///
 /// public/private の境界 ℓ+1 は `witness.len() − pk.private_query.len()` から導く。
-/// A, B(G2), B_1(G1) を組み、C は「private wire 合成 + h·t/δ」に
-/// `s·A + r·B_1 − r·s·δ` を足して構成する。計算量は O(num_vars · num_constraints)。
+/// `A = α + Σ a_i·u_i(τ) + r·δ`、`B = β + Σ a_i·v_i(τ) + s·δ`（C 計算用に G1 版 B_1 も作る）。
+/// `C` は private wire 合成 `Σ_{i>ℓ} a_i·(β u_i+α v_i+w_i)(τ)/δ` に `h(τ)t(τ)/δ` を足し、
+/// さらに `s·A + r·B_1 − r·s·δ` を加える（最後の `−r·s·δ` 項が r,s の二重計上を相殺）。
+/// 計算量は O(num_vars · num_constraints)。
 pub fn prove(
     pk: &ProvingKey,
     qap_fr: &QapFr,

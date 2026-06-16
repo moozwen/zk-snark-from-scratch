@@ -15,12 +15,12 @@ use ark_bn254::{Fr, G1Projective, G2Projective};
 use ark_ec::PrimeGroup;
 use ark_ff::Field;
 
-/// 本式 Groth16 の toxic waste (trusted setupt の秘密値)。
+/// Groth16 の toxic waste（trusted setup の秘密値）。
 ///
-/// setupt でこれらから pk/vk を構成し、生成後は破棄する前提。
+/// setup でこれらから pk/vk を構成し、生成後は破棄する前提。
 /// いずれか 1 つでも漏れると、偽の証明を作れてしまう。
 /// `gamma` / `delta` は逆元を取るため 0 であってはならない。
-/// （本番では MPC ceremony で生成するが、本実装では単一生成 & 破棄前提とする。
+/// （本番では MPC ceremony で生成するが、本実装では単一生成 & 破棄前提とする。）
 pub struct ToxicWaste {
     pub alpha: Fr,
     pub beta: Fr,
@@ -32,9 +32,9 @@ pub struct ToxicWaste {
 /// QAP 多項式を `Fr` 係数に変換した薄いラッパ。
 ///
 /// `a_polys[i]` / `b_polys[i]` / `c_polys[i]` が変数 `i` の `u_i / v_i / w_i` の
-/// 昇順系数列（`x^j` の係数が index `j`）。
+/// 昇順係数列（`x^j` の係数が index `j`）。
 /// [`crate::adapter::polys_to_fr_vecs`] の出力を 3 本まとめて持つ。
-/// setup と 本式 prover の双方が τ の評価入力に使う。
+/// setup と本式 prover の双方が τ の評価入力に使う。
 pub struct QapFr {
     pub a_polys: Vec<Vec<Fr>>,
     pub b_polys: Vec<Vec<Fr>>,
@@ -188,7 +188,7 @@ mod tests {
     use std::vec;
 
     use super::*;
-    use ark_ff::Field; // tau.pow() のため
+    use ark_ff::Field; // inverse() のため
 
     fn sample_toxic() -> ToxicWaste {
         ToxicWaste {

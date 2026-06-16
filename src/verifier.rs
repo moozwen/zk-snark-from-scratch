@@ -37,7 +37,7 @@ pub fn verify(vk: &VerifyingKey, public_inputs: &[Fr], proof: &Groth16Proof) -> 
     assert_eq!(
         public_inputs.len(),
         vk.ic.len() - 1,
-        "public_inputs length must equal l (vk.ic.len() - 1"
+        "public_inputs length must equal ℓ (vk.ic.len() - 1)"
     );
 
     // vk_x = IC_0 + Σ_{i=1..ℓ} a_i·IC_i
