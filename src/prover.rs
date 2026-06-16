@@ -40,7 +40,6 @@ pub struct Proof {
 /// ランダム値 r, s が織り込まれており、検証は 4 ペアリングの等式で行う。
 /// r, s により同じ witness でも proof が毎回変わる（zero-knowledge）。
 #[derive(Debug)]
-#[allow(dead_code)] // Phase 6b の verifier / main 配線（B4）で使う。それまで dead_code を許可
 pub struct Groth16Proof {
     /// `[A]_1 = [ α + Σ_i a_i·u_i(τ) + r·δ ]_1`
     pub a: G1Projective,
@@ -151,7 +150,6 @@ pub fn prove_simple(
 /// public/private の境界 ℓ+1 は `witness.len() − pk.private_query.len()` から導く。
 /// A, B(G2), B_1(G1) を組み、C は「private wire 合成 + h·t/δ」に
 /// `s·A + r·B_1 − r·s·δ` を足して構成する。計算量は O(num_vars · num_constraints)。
-#[allow(dead_code)] // B4 で main に配線したら外す
 pub fn prove(
     pk: &ProvingKey,
     qap_fr: &QapFr,

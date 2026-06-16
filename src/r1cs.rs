@@ -180,7 +180,6 @@ impl ConstraintSystem {
     /// [`init_one`](Self::init_one) 済みであることも前提とする。
     ///
     /// 値は未代入（`None`）状態で確保される。`assign` で値を入れる必要がある。
-    #[allow(dead_code)] // Phase 6b で公開入力回路 / mainに配線したら外す
     pub fn alloc_public_input(&mut self) -> Variable {
         assert!(
             self.num_public_variables >= 1,

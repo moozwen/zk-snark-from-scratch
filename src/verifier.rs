@@ -65,7 +65,6 @@ pub fn verify_simple(proof: &Proof) -> bool {
 ///
 /// # Panics
 /// `public_inputs.len() != vk.ic.len() - 1`（公開入力数と vk の不整合）のとき panic。
-#[allow(dead_code)] // B4 で main に配線したら外す
 pub fn verify(vk: &VerifyingKey, public_inputs: &[Fr], proof: &Groth16Proof) -> bool {
     assert_eq!(
         public_inputs.len(),
