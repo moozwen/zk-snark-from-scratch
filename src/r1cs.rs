@@ -180,7 +180,6 @@ impl ConstraintSystem {
     /// [`init_one`](Self::init_one) 済みであることも前提とする。
     ///
     /// 値は未代入（`None`）状態で確保される。`assign` で値を入れる必要がある。
-    #[allow(dead_code)] // Phase 6b で公開入力回路 / mainに配線したら外す
     pub fn alloc_public_input(&mut self) -> Variable {
         assert!(
             self.num_public_variables >= 1,
@@ -290,6 +289,10 @@ impl ConstraintSystem {
     ///
     /// 新変数 `c` を確保して `c = a + k` を計算し、
     /// 制約 `(a + k · 1) · 1 = (c)` を追加する。戻り値は `c`。
+    ///
+    /// 現在は unit test からのみ呼ばれる（main の x³+5 デモは `enforce` で
+    /// 公開出力に接続するため）。回路で使われ始めたら attribute を外す。
+    #[allow(dead_code)]
     pub fn add_const(&mut self, a: Variable, constant: FieldElement) -> Variable {
         let c = self.alloc_variable();
 
