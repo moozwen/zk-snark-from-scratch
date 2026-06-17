@@ -2,7 +2,7 @@
 
 > Rust で書かれた Groth16 の教育用スクラッチ実装。理論と実装のギャップを埋めるためのリファレンス。
 
-![status](https://img.shields.io/badge/status-WIP-orange) ![version](https://img.shields.io/badge/version-v0.5--dev-blue) ![license](https://img.shields.io/badge/license-MIT-green)
+![status](https://img.shields.io/badge/status-WIP-orange) ![version](https://img.shields.io/badge/version-v0.6-blue) ![license](https://img.shields.io/badge/license-MIT-green)
 
 ## これは何か / What is this
 
@@ -32,14 +32,14 @@
 
 ## ステータスとロードマップ / Status & Roadmap
 
-現在 **v0.5 (Groth16 Prover)** を実装中。
+**v0.6 (Groth16 Verifier)** まで完了。本式 Groth16 の prover / verifier が E2E で動作する（`cargo run` で `x^3 + 5` のデモを実行可能）。次は **v0.7 (サンプル回路)**。
 
 | Version | 内容 | 状態 |
 |---|---|---|
-| v0.3 | 有限体、楕円曲線、ペアリング基盤 | 🚧 |
-| v0.4 | R1CS → QAP 変換 | 🚧 |
-| v0.5 | Groth16 プルーバー（SRS 評価 + QAP ベース） | 🚧 |
-| v0.6 | Groth16 検証者 | ⏳ |
+| v0.3 | 有限体、楕円曲線、ペアリング基盤 | ✅ |
+| v0.4 | R1CS → QAP 変換 | ✅ |
+| v0.5 | Groth16 プルーバー（pk + ランダム化 r, s による zero-knowledge） | ✅ |
+| v0.6 | Groth16 検証者（4 ペアリングの検証等式） | ✅ |
 | v0.7 | サンプルサーキット 3 種（sudoku, range proof, hash preimage） | ⏳ |
 | v0.8 | ベンチマーク（arkworks / snarkjs との比較） | ⏳ |
 | v0.9 | ドキュメント整備 | ⏳ |
@@ -61,11 +61,16 @@ cargo test
 ### 最小サンプル（E2E: R1CS → Prove → Verify）
 
 ```rust
-// 例: y = x^3 + 5 を知っていることを、x を明かさず証明する
-// (コードは v0.6 完成時にここに掲載します)
+// 例: y = x^3 + 5 を満たす x を知っていることを、x を明かさず証明する
+//   1. R1CS 構築（y を公開入力、x を秘密入力）
+//   2. R1CS -> QAP -> h(x)
+//   3. generate_groth16_keys で pk/vk を生成
+//   4. prove(pk, ...) -> Groth16Proof
+//   5. verify(vk, public_inputs, proof) -> true
 ```
 
-現時点での E2E フローは `tests/` に収録されているテストを参照してください。
+動作する E2E デモは [`src/main.rs`](src/main.rs)（`cargo run`）を、各段の単体・結合テストは
+各モジュール内のインライン `#[cfg(test)]`（`cargo test`）を参照してください。
 
 ---
 
@@ -77,7 +82,7 @@ Groth16 を 5 つのレイヤーに分けて実装しています。
 |---|---|---|
 | 1. 数学的基盤 | `field.rs`, `polynomial.rs` | 有限体、多項式演算 |
 | 2. 回路の表現 | `r1cs.rs`, `qap.rs`, `adapter.rs` | R1CS, QAP 変換, witness 生成 |
-| 3. プロトコル | `setup.rs`, `prover.rs`, `verifier.rs` | SRS 生成, 証明, 検証 |
+| 3. プロトコル | `setup.rs`, `prover.rs`, `verifier.rs` | 鍵生成 (pk/vk), 証明, 検証 |
 | 4. 実装的側面 | (WIP) | シリアライゼーション, 定時間演算 |
 | 5. 応用 | (WIP) `examples/` | サンプル回路, Web デモ |
 
